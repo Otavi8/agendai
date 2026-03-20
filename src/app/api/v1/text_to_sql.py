@@ -20,6 +20,7 @@ from src.app.api.v1.dtos.text_to_sql import (
 )
 from src.app.core.common.config import settings
 from src.app.core.common.logging import logger
+from src.app.core.common.model.message import Message
 from src.app.core.session.session_model import Session
 
 router = APIRouter()
@@ -56,8 +57,9 @@ async def text_to_sql_query(
         )
 
         agent = await get_text_sql_agent()
+        messages = [Message(role="user", content=sql_request.query)]
         result = await agent.agent_invoke(
-            {"query": sql_request.query},
+            messages,
             session.id,
             user_id=session.user_id,
         )

@@ -15,6 +15,14 @@ from langgraph.constants import START, END
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.types import StateSnapshot
 
+from src.app.agents.middleware import (
+    AgentContext,
+    AgentPipeline,
+    build_invoke_config,
+    error_handling_middleware,
+    logging_middleware,
+    memory_middleware,
+)
 from src.app.core.guardrails import create_input_guardrail_node, create_output_guardrail_node
 from src.app.agents.open_deep_research.deep_researcher import clarify_with_user, write_research_brief, final_report_generation
 from src.app.agents.open_deep_research.researcher_subgraph import ResearcherAgent
@@ -22,13 +30,12 @@ from src.app.agents.open_deep_research.state import AgentState, AgentInputState,
 from src.app.agents.open_deep_research.supervisor_subgraph import SupervisorAgent
 from src.app.agents.open_deep_research.utils import get_all_tools
 from src.app.agents.tools.think_tool import think_tool
-from src.app.core.common.config import Environment, settings
+from src.app.core.common.config import settings
 from src.app.core.common.graph_utils import process_messages
 from src.app.core.common.logging import logger
 from src.app.core.common.model.message import Message
 from src.app.core.llm.llm_utils import dump_messages, record_llm_error
 from src.app.core.memory.memory import bg_update_memory
-from src.app.init import langfuse_callback_handler
 
 
 class DeepResearchAgent:
@@ -49,13 +56,10 @@ class DeepResearchAgent:
         self.name = name
         self.checkpointer = checkpointer
         self._graph: Optional[CompiledStateGraph] = None
-        self._config = {
-            "callbacks": [langfuse_callback_handler],
-            "metadata": {
-                "environment": settings.ENVIRONMENT.value,
-                "debug": settings.DEBUG,
-            },
-        }
+        self._pipeline = AgentPipeline(
+            middlewares=[logging_middleware, error_handling_middleware, memory_middleware],
+            invoke_fn=self._core_invoke,
+        )
 
         lead_researcher_tools = [tool(ConductResearch), tool(ResearchComplete), think_tool]
         self.researcher_subagent = ResearcherAgent("Researcher", get_all_tools())
@@ -88,35 +92,24 @@ class DeepResearchAgent:
         session_id: str,
         user_id: Optional[int] = None,
     ) -> list[Message] | list[Any]:
-        """Invoke the deep research agent with the given messages.
+        """Invoke the deep research agent through the middleware pipeline."""
+        ctx = AgentContext(
+            messages=messages,
+            session_id=session_id,
+            user_id=user_id,
+            config=build_invoke_config(session_id, user_id, self.name),
+            agent_name=self.name,
+            metadata={"model_name": "deep_research"},
+        )
+        return await self._pipeline.run(ctx)
 
-        Args:
-            messages: The user messages to process.
-            session_id: The session ID for the conversation.
-            user_id: The user ID for memory operations.
-
-        Returns:
-            list[Message]: The processed response messages.
-        """
-        config = self._build_invoke_config(session_id, user_id)
-
-        try:
-            response = await self._graph.ainvoke(
-                input={"messages": dump_messages(messages)},
-                config=config,
-            )
-
-            if response.get("messages"):
-                bg_update_memory(user_id, convert_to_openai_messages(response["messages"]), config["metadata"])
-
-            return process_messages(response["messages"])
-
-        except Exception as e:
-            record_llm_error("deep_research", self.name)
-            if settings.ENVIRONMENT == Environment.DEVELOPMENT:
-                raise e
-            logger.exception("deep_research_invoke_failed", session_id=session_id, error=str(e))
-            return []
+    async def _core_invoke(self, ctx: AgentContext) -> list[Message]:
+        """Core graph invocation without cross-cutting concerns."""
+        response = await self._graph.ainvoke(
+            input={"messages": dump_messages(ctx.messages)},
+            config=ctx.config,
+        )
+        return process_messages(response["messages"])
 
     async def agent_invoke_stream(
         self, messages: list[Message], session_id: str, user_id: Optional[int] = None
@@ -131,7 +124,7 @@ class DeepResearchAgent:
         Yields:
             str: Tokens of the agent response.
         """
-        config = self._build_invoke_config(session_id, user_id)
+        config = build_invoke_config(session_id, user_id, self.name)
 
         try:
             async for token, _ in self._graph.astream(
@@ -153,13 +146,6 @@ class DeepResearchAgent:
             record_llm_error("deep_research", self.name)
             logger.error("deep_research_stream_failed", error=str(stream_error), session_id=session_id)
             raise stream_error
-
-    def _build_invoke_config(self, session_id: str, user_id: Optional[int] = None) -> dict:
-        config = self._config.copy()
-        config["configurable"] = {"thread_id": session_id}
-        config["metadata"]["user_id"] = user_id
-        config["metadata"]["session_id"] = session_id
-        return config
 
     def _build_deep_research_graph(self) -> StateGraph:
         """Build the complete deep research workflow graph (uncompiled).

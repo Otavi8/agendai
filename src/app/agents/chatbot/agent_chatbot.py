@@ -10,8 +10,16 @@ from langgraph.graph import END
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.types import RunnableConfig, Command, StateSnapshot
 
+from src.app.agents.middleware import (
+    AgentContext,
+    AgentPipeline,
+    build_invoke_config,
+    error_handling_middleware,
+    logging_middleware,
+    memory_middleware,
+)
 from src.app.core.guardrails import create_input_guardrail_node, create_output_guardrail_node
-from src.app.core.common.config import settings, Environment
+from src.app.core.common.config import settings
 from src.app.core.common.graph_utils import process_messages
 from src.app.core.common.logging import logger
 from src.app.core.metrics import model_invoke_with_metrics
@@ -22,8 +30,7 @@ from src.app.core.llm.llm_utils import dump_messages, prepare_messages, process_
 from src.app.core.context import summarize_if_too_long, truncate_tool_call_if_too_long
 from src.app.core.mcp.mcp_utils import handle_mcp_tool_call
 from src.app.core.mcp.session_manager import get_mcp_session_manager
-from src.app.core.memory.memory import get_relevant_memory, bg_update_memory
-from src.app.init import langfuse_callback_handler
+from src.app.core.memory.memory import bg_update_memory, get_relevant_memory
 
 from langchain.chat_models import init_chat_model
 
@@ -44,13 +51,10 @@ class AgentChatbot:
         self.tools_by_name = {tool.name: tool for tool in tools}
         self.mcp_tools_by_name: dict[str, BaseTool] = {}
         self._graph: Optional[CompiledStateGraph] = None
-        self._config = {
-            "callbacks": [langfuse_callback_handler],
-            "metadata": {
-                "environment": settings.ENVIRONMENT.value,
-                "debug": settings.DEBUG,
-            },
-        }
+        self._pipeline = AgentPipeline(
+            middlewares=[logging_middleware, error_handling_middleware, memory_middleware],
+            invoke_fn=self._core_invoke,
+        )
 
     async def compile(self) -> CompiledStateGraph:
         """Compile the graph and prepare for execution."""
@@ -71,33 +75,35 @@ class AgentChatbot:
         session_id: str,
         user_id: Optional[int] = None,
     ) -> list[Message] | list[Any]:
-        relevant_memory = (await get_relevant_memory(user_id, messages[-1].content)) or "No relevant memory found."
-        agent_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
-        config = self._build_invoke_config(session_id, user_id)
+        """Invoke the agent through the middleware pipeline."""
+        ctx = AgentContext(
+            messages=messages,
+            session_id=session_id,
+            user_id=user_id,
+            config=build_invoke_config(session_id, user_id, self.name),
+            agent_name=self.name,
+            metadata={"model_name": settings.DEFAULT_LLM_MODEL},
+        )
+        return await self._pipeline.run(ctx)
 
-        try:
-            response = await model_invoke_with_metrics(
-                self._graph,
-                agent_input,
-                settings.DEFAULT_LLM_MODEL,
-                self.name,
-                config,
-            )
-            openai_style_messages = convert_to_openai_messages(response["messages"])
-            result = [
-                Message(role=message["role"], content=str(message["content"]))
-                for message in openai_style_messages
-                if message["role"] in ["assistant", "user"] and message["content"]
-            ]
-        except Exception as e:
-            if settings.ENVIRONMENT == Environment.DEVELOPMENT:
-                raise e
-            logger.exception("agent_invoke_failed", session_id=session_id, error=str(e))
-            return []
+    async def _core_invoke(self, ctx: AgentContext) -> list[Message]:
+        """Core graph invocation without cross-cutting concerns."""
+        long_term_memory = ctx.metadata.get("long_term_memory", "")
+        agent_input = {"messages": dump_messages(ctx.messages), "long_term_memory": long_term_memory}
 
-        messages_dic = [dict(role=m.role, content=str(m.content)) for m in result]
-        bg_update_memory(user_id, messages_dic, {"session_id": session_id, "agent_name": self.name, "user_id": user_id})
-        return result
+        response = await model_invoke_with_metrics(
+            self._graph,
+            agent_input,
+            settings.DEFAULT_LLM_MODEL,
+            self.name,
+            ctx.config,
+        )
+        openai_style_messages = convert_to_openai_messages(response["messages"])
+        return [
+            Message(role=message["role"], content=str(message["content"]))
+            for message in openai_style_messages
+            if message["role"] in ["assistant", "user"] and message["content"]
+        ]
 
     async def agent_invoke_stream(
         self, messages: list[Message], session_id: str, user_id: Optional[int] = None
@@ -112,7 +118,7 @@ class AgentChatbot:
         Yields:
             str: Tokens of the LLM response.
         """
-        config = self._build_invoke_config(session_id, user_id)
+        config = build_invoke_config(session_id, user_id, self.name)
         relevant_memory = (
             await get_relevant_memory(user_id, messages[-1].content)
         ) or "No relevant memory found."
@@ -151,13 +157,6 @@ class AgentChatbot:
             config={"configurable": {"thread_id": session_id}}
         )
         return process_messages(state.values["messages"]) if state.values else []
-
-    def _build_invoke_config(self, session_id: str, user_id: Optional[int] = None) -> dict:
-        config = self._config.copy()
-        config["configurable"] = {"thread_id": session_id}
-        config["metadata"]["user_id"] = user_id
-        config["metadata"]["session_id"] = session_id
-        return config
 
     def _get_all_tools(self) -> list[BaseTool]:
         """Get all available tools including MCP tools."""
