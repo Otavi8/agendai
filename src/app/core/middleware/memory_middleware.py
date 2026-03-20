@@ -1,6 +1,6 @@
 """Middleware that integrates long-term memory retrieval and update."""
 
-from src.app.agents.middleware.types import AgentContext, InvokeResult, NextFn
+from src.app.core.middleware.types import AgentContext, InvokeResult, NextFn
 from src.app.core.memory.memory import bg_update_memory, get_relevant_memory
 
 

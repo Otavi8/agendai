@@ -1,6 +1,6 @@
 """Middleware that adds structured logging around agent invocations."""
 
-from src.app.agents.middleware.types import AgentContext, InvokeResult, NextFn
+from src.app.core.middleware.types import AgentContext, InvokeResult, NextFn
 from src.app.core.common.logging import logger
 
 

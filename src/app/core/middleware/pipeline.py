@@ -8,7 +8,7 @@ middleware stacks work.
 from functools import reduce
 from typing import Sequence
 
-from src.app.agents.middleware.types import AgentContext, AgentMiddleware, InvokeResult, NextFn
+from src.app.core.middleware.types import AgentContext, AgentMiddleware, InvokeResult, NextFn
 
 
 class AgentPipeline:

@@ -15,7 +15,7 @@ from langgraph.constants import START, END
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.types import StateSnapshot
 
-from src.app.agents.middleware import (
+from src.app.core.middleware import (
     AgentContext,
     AgentPipeline,
     build_invoke_config,

@@ -7,7 +7,7 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
 from langchain_openai import ChatOpenAI
 
-from src.app.agents.middleware import (
+from src.app.core.middleware import (
     AgentContext,
     AgentPipeline,
     build_invoke_config,

@@ -1,6 +1,6 @@
 """Middleware that provides consistent error handling across agents."""
 
-from src.app.agents.middleware.types import AgentContext, InvokeResult, NextFn
+from src.app.core.middleware.types import AgentContext, InvokeResult, NextFn
 from src.app.core.common.config import Environment, settings
 from src.app.core.common.logging import logger
 from src.app.core.llm.llm_utils import record_llm_error

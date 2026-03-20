@@ -6,7 +6,7 @@ Useful for agents that do not embed guardrails as LangGraph nodes
 
 from typing import Optional
 
-from src.app.agents.middleware.types import AgentContext, InvokeResult, NextFn
+from src.app.core.middleware.types import AgentContext, InvokeResult, NextFn
 from src.app.core.common.logging import logger
 from src.app.core.common.model.message import Message
 from src.app.core.guardrails.content_filter import check_content_filter
