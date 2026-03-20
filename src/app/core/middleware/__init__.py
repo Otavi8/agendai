@@ -5,22 +5,22 @@ Usage::
     from src.app.core.middleware import (
         AgentContext,
         AgentPipeline,
-        error_handling_middleware,
-        logging_middleware,
-        memory_middleware,
-        create_guardrail_middleware,
+        ErrorHandlingMiddleware,
+        LoggingMiddleware,
+        MemoryMiddleware,
+        GuardrailMiddleware,
     )
 
     pipeline = AgentPipeline(
-        middlewares=[logging_middleware, error_handling_middleware, memory_middleware],
+        middlewares=[LoggingMiddleware(), ErrorHandlingMiddleware(), MemoryMiddleware()],
         invoke_fn=agent.core_invoke,
     )
     result = await pipeline.run(ctx)
 """
 
-from src.app.core.middleware.error_handling_middleware import error_handling_middleware
-from src.app.core.middleware.guardrail_middleware import create_guardrail_middleware
-from src.app.core.middleware.logging_middleware import logging_middleware
-from src.app.core.middleware.memory_middleware import memory_middleware
-from src.app.core.middleware.pipeline import AgentPipeline
+from src.app.core.middleware.error_handling_middleware import ErrorHandlingMiddleware
+from src.app.core.middleware.guardrail_middleware import GuardrailMiddleware
+from src.app.core.middleware.logging_middleware import LoggingMiddleware
+from src.app.core.middleware.memory_middleware import MemoryMiddleware
+from src.app.core.middleware.pipeline import AgentPipeline, MiddlewareManager
 from src.app.core.middleware.types import AgentContext, AgentMiddleware, InvokeResult, NextFn, build_invoke_config

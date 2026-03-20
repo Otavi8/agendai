@@ -11,9 +11,9 @@ from src.app.core.middleware import (
     AgentContext,
     AgentPipeline,
     build_invoke_config,
-    create_guardrail_middleware,
-    error_handling_middleware,
-    logging_middleware,
+    ErrorHandlingMiddleware,
+    GuardrailMiddleware,
+    LoggingMiddleware,
 )
 from src.app.core.common.config import settings
 from src.app.core.common.graph_utils import process_messages
@@ -28,9 +28,9 @@ class TextSQLDeepAgent:
         self.agent = create_sql_deep_agent()
         self._pipeline = AgentPipeline(
             middlewares=[
-                logging_middleware,
-                error_handling_middleware,
-                create_guardrail_middleware(),
+                LoggingMiddleware(),
+                ErrorHandlingMiddleware(),
+                GuardrailMiddleware(),
             ],
             invoke_fn=self._core_invoke,
         )

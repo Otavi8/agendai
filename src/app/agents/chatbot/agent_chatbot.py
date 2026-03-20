@@ -14,9 +14,9 @@ from src.app.core.middleware import (
     AgentContext,
     AgentPipeline,
     build_invoke_config,
-    error_handling_middleware,
-    logging_middleware,
-    memory_middleware,
+    ErrorHandlingMiddleware,
+    LoggingMiddleware,
+    MemoryMiddleware,
 )
 from src.app.core.guardrails import create_input_guardrail_node, create_output_guardrail_node
 from src.app.core.common.config import settings
@@ -52,7 +52,7 @@ class AgentChatbot:
         self.mcp_tools_by_name: dict[str, BaseTool] = {}
         self._graph: Optional[CompiledStateGraph] = None
         self._pipeline = AgentPipeline(
-            middlewares=[logging_middleware, error_handling_middleware, memory_middleware],
+            middlewares=[LoggingMiddleware(), ErrorHandlingMiddleware(), MemoryMiddleware()],
             invoke_fn=self._core_invoke,
         )
 
@@ -182,26 +182,34 @@ class AgentChatbot:
         logger.info("tools_loaded", total_count=all_tools_count, mcp_count=len(mcp_tools), builtin_count=len(self.tools))
 
     async def _tool_call_node(self, state: GraphState) -> Command:
-        """Process tool calls from the last message.
-
-        Args:
-            state: The current agent state containing messages and tool calls.
-
-        Returns:
-            Command: Command object with updated messages and routing back to chat.
-        """
+        """Process tool calls from the last message."""
         outputs = []
+        manager = self._pipeline.manager
+        ctx = manager.active_ctx
+
         try:
             for tool_call in state.messages[-1].tool_calls:
                 tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+
+                if ctx:
+                    tool_args = await manager.run_before_tool_call(
+                        ctx, tool_name=tool_name, tool_args=tool_args,
+                    )
 
                 if tool_name in self.tools_by_name:
                     try:
-                        tool_result = await self.tools_by_name[tool_name].ainvoke(tool_call["args"])
+                        tool_result = await self.tools_by_name[tool_name].ainvoke(tool_args)
                         tool_executions_total.labels(tool_name=tool_name, status="success").inc()
                     except Exception as tool_error:
                         tool_executions_total.labels(tool_name=tool_name, status="error").inc()
                         raise tool_error
+
+                    if ctx:
+                        tool_result = await manager.run_after_tool_call(
+                            ctx, tool_name=tool_name, tool_result=tool_result,
+                        )
+
                     outputs.append(truncate_tool_call_if_too_long(
                         ToolMessage(
                             content=tool_result,
@@ -226,15 +234,10 @@ class AgentChatbot:
         return Command(update={"messages": outputs}, goto="chat")
 
     async def _chat_node(self, state: GraphState, config: RunnableConfig) -> Command:
-        """Process the chat state and generate a response.
+        """Process the chat state and generate a response."""
+        manager = self._pipeline.manager
+        ctx = manager.active_ctx
 
-        Args:
-            state: The current state of the conversation.
-            config: The configuration for the node execution.
-
-        Returns:
-            Command: Command object with updated state and next node to execute.
-        """
         condensed_messages = await summarize_if_too_long(
             messages=state.messages,
             model_name=f"openai:{settings.DEFAULT_LLM_MODEL}",
@@ -252,7 +255,20 @@ class AgentChatbot:
         )
 
         try:
-            response_message = await model_invoke_with_metrics(model, dump_messages(messages), settings.DEFAULT_LLM_MODEL, self.name, config)
+            prepared = dump_messages(messages)
+
+            if ctx:
+                prepared = await manager.run_before_model_call(
+                    ctx, messages=prepared, model_name=settings.DEFAULT_LLM_MODEL,
+                )
+
+            response_message = await model_invoke_with_metrics(model, prepared, settings.DEFAULT_LLM_MODEL, self.name, config)
+
+            if ctx:
+                response_message = await manager.run_after_model_call(
+                    ctx, response=response_message, model_name=settings.DEFAULT_LLM_MODEL,
+                )
+
             response_message = process_llm_response(response_message)
             logger.info(
                 "llm_response_generated",

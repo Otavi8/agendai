@@ -19,9 +19,9 @@ from src.app.core.middleware import (
     AgentContext,
     AgentPipeline,
     build_invoke_config,
-    error_handling_middleware,
-    logging_middleware,
-    memory_middleware,
+    ErrorHandlingMiddleware,
+    LoggingMiddleware,
+    MemoryMiddleware,
 )
 from src.app.core.guardrails import create_input_guardrail_node, create_output_guardrail_node
 from src.app.agents.open_deep_research.deep_researcher import clarify_with_user, write_research_brief, final_report_generation
@@ -57,7 +57,7 @@ class DeepResearchAgent:
         self.checkpointer = checkpointer
         self._graph: Optional[CompiledStateGraph] = None
         self._pipeline = AgentPipeline(
-            middlewares=[logging_middleware, error_handling_middleware, memory_middleware],
+            middlewares=[LoggingMiddleware(), ErrorHandlingMiddleware(), MemoryMiddleware()],
             invoke_fn=self._core_invoke,
         )
 
