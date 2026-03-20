@@ -17,6 +17,7 @@ from src.app.core.middleware import (
     ErrorHandlingMiddleware,
     LoggingMiddleware,
     MemoryMiddleware,
+    SummarizationMiddleware,
 )
 from src.app.core.guardrails import create_input_guardrail_node, create_output_guardrail_node
 from src.app.core.common.config import settings
@@ -27,7 +28,7 @@ from src.app.core.metrics.metrics import tool_executions_total
 from src.app.core.common.model.graph import GraphState
 from src.app.core.common.model.message import Message
 from src.app.core.llm.llm_utils import dump_messages, prepare_messages, process_llm_response, record_llm_error
-from src.app.core.context import summarize_if_too_long, truncate_tool_call_if_too_long
+from src.app.core.context import truncate_tool_call_if_too_long
 from src.app.core.mcp.mcp_utils import handle_mcp_tool_call
 from src.app.core.mcp.session_manager import get_mcp_session_manager
 from src.app.core.memory.memory import bg_update_memory, get_relevant_memory
@@ -52,7 +53,15 @@ class AgentChatbot:
         self.mcp_tools_by_name: dict[str, BaseTool] = {}
         self._graph: Optional[CompiledStateGraph] = None
         self._pipeline = AgentPipeline(
-            middlewares=[LoggingMiddleware(), ErrorHandlingMiddleware(), MemoryMiddleware()],
+            middlewares=[
+                LoggingMiddleware(),
+                ErrorHandlingMiddleware(),
+                MemoryMiddleware(),
+                SummarizationMiddleware(
+                    llm=chatbot_model,
+                    model_name=f"openai:{settings.DEFAULT_LLM_MODEL}",
+                ),
+            ],
             invoke_fn=self._core_invoke,
         )
 
@@ -238,15 +247,14 @@ class AgentChatbot:
         manager = self._pipeline.manager
         ctx = manager.active_ctx
 
-        condensed_messages = await summarize_if_too_long(
-            messages=state.messages,
-            model_name=f"openai:{settings.DEFAULT_LLM_MODEL}",
-            llm=chatbot_model,
-            session_id=config["configurable"]["thread_id"],
-        )
+        messages = state.messages
+        if ctx:
+            messages = await manager.run_before_model_call(
+                ctx, messages=messages, model_name=settings.DEFAULT_LLM_MODEL,
+            )
 
         system_prompt = load_system_prompt(long_term_memory=state.long_term_memory)
-        messages = prepare_messages(condensed_messages, chatbot_model, system_prompt)
+        prepared_messages = prepare_messages(messages, chatbot_model, system_prompt)
 
         model = (
             chatbot_model
@@ -255,12 +263,7 @@ class AgentChatbot:
         )
 
         try:
-            prepared = dump_messages(messages)
-
-            if ctx:
-                prepared = await manager.run_before_model_call(
-                    ctx, messages=prepared, model_name=settings.DEFAULT_LLM_MODEL,
-                )
+            prepared = dump_messages(prepared_messages)
 
             response_message = await model_invoke_with_metrics(model, prepared, settings.DEFAULT_LLM_MODEL, self.name, config)
 
