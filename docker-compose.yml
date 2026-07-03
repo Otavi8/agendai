@@ -1,20 +1,24 @@
-version: '3.8'
-
 services:
   db:
-    env_file:
-      - .env.development
     image: pgvector/pgvector:pg16
+    container_name: agent-harness-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_harness}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Enables pgvector on first init (fresh volume only)
+      - ./scripts/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent_harness}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: always
+      start_period: 10s
+    restart: unless-stopped
     networks:
       - monitoring
 

@@ -164,6 +164,30 @@ docker-compose-logs:
 	fi; \
 	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE logs -f
 
+# Postgres (pgvector) — local database only
+db-up:
+	@echo "Starting Postgres (pgvector)..."
+	$(DOCKER_COMPOSE) up -d db
+	@echo "Waiting for database to be healthy..."
+	@for i in $$(seq 1 30); do \
+		status=$$(docker inspect --format='{{.State.Health.Status}}' agent-harness-db 2>/dev/null || echo starting); \
+		if [ "$$status" = "healthy" ]; then echo "Database is healthy."; exit 0; fi; \
+		sleep 2; \
+	done; \
+	echo "Database did not become healthy in time. Check: make db-logs"; exit 1
+
+db-down:
+	$(DOCKER_COMPOSE) stop db
+
+db-logs:
+	$(DOCKER_COMPOSE) logs -f db
+
+db-reset:
+	@echo "WARNING: destroying the Postgres data volume."
+	$(DOCKER_COMPOSE) rm -sf db
+	docker volume rm agent-harness-prod-ready-template_postgres-data 2>/dev/null || true
+	$(MAKE) db-up
+
 # Help
 help:
 	@echo "Usage: make <target>"
@@ -177,6 +201,10 @@ help:
 	@echo "  eval: Run evaluation with interactive mode"
 	@echo "  eval-quick: Run evaluation with default settings"
 	@echo "  eval-no-report: Run evaluation without generating report"
+	@echo "  db-up: Start local Postgres (pgvector) and wait until healthy"
+	@echo "  db-down: Stop local Postgres (keeps data)"
+	@echo "  db-logs: Follow Postgres logs"
+	@echo "  db-reset: Destroy the Postgres volume and recreate it"
 	@echo "  test: Run tests"
 	@echo "  clean: Clean up"
 	@echo "  docker-build: Build default Docker image"
