@@ -299,7 +299,7 @@ async def update_session_name(
         if sanitized_session_id != sanitized_current_session:
             raise HTTPException(status_code=403, detail="Cannot modify other sessions")
 
-        session = await user_repository.update_session_name(sanitized_session_id, sanitized_name)
+        session = await session_repository.update_session_name(sanitized_session_id, sanitized_name)
 
         # Create a new token (not strictly necessary but maintains consistency)
         token = create_access_token(sanitized_session_id)
@@ -330,7 +330,7 @@ async def delete_session(session_id: str, current_session: Session = Depends(get
         if sanitized_session_id != sanitized_current_session:
             raise HTTPException(status_code=403, detail="Cannot delete other sessions")
 
-        await user_repository.delete_session(sanitized_session_id)
+        await session_repository.delete_session(sanitized_session_id)
 
         logger.info("session_deleted", session_id=session_id, user_id=current_session.user_id)
     except ValueError as ve:
@@ -349,7 +349,7 @@ async def get_user_sessions(user: User = Depends(get_current_user)):
         List[SessionResponse]: List of session IDs
     """
     try:
-        sessions = await user_repository.get_user_sessions(user.id)
+        sessions = await session_repository.get_user_sessions(user.id)
         return [
             SessionResponse(
                 session_id=sanitize_string(session.id),
