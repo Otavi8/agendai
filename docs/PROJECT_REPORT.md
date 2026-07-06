@@ -1,130 +1,103 @@
-# Project Report — Agent Harness (production-ready template)
+# Relatório do Projeto: Agent Harness (template pronto para produção)
 
-_Generated 2026-07-03. Covers: what changed in this session, what the project is and does, and
-where to take it for real, high-ROI use._
+_Gerado em 2026-07-03. Cobre: o que mudou nesta sessão, o que o projeto é e faz, e para onde levá-lo para uso real com alto ROI._
 
 ---
 
-## 1. What was changed in this session
+## 1. O Que Foi Alterado Nesta Sessão
 
-Goal: migrate the repo off Cursor onto Claude Code, add a first-class Postgres Docker service, and
-document everything under `.claude/` and `CLAUDE.md`.
+Objetivo: migrar o repositório do Cursor para o Codex, adicionar um serviço Docker de Postgres de primeira classe e documentar tudo em `.codex/` e `CODEX.md`.
 
-### Added
-| Path | Purpose |
-|------|---------|
-| `CLAUDE.md` | Primary guidance for Claude Code: project map, dev commands, the 10 conventions, how to build an agent, pitfalls. |
-| `.claude/settings.json` | Permission allowlist for safe commands (pytest, ruff, make, docker, git read ops); `ask` gates on destructive ops. |
-| `.claude/commands/new-agent.md` | `/new-agent` — scaffolds a full agent (package + route + DTO + rate limit). |
-| `.claude/commands/plan.md` | `/plan` — writes a checkboxed plan to `.claude/plans/` before coding. |
-| `.claude/commands/run.md` | `/run` — brings up DB + API and verifies `/health`. |
-| `.claude/commands/db.md` | `/db up\|down\|logs\|psql\|reset` — manage local Postgres. |
-| `.claude/agents/harness-reviewer.md` | Subagent that reviews diffs against the repo conventions. |
-| `.claude/skills/scaffold-agent/SKILL.md` | Skill encoding the canonical agent structure. |
-| `.claude/plans/.gitkeep` | Home for task plans. |
-| `scripts/postgres/init/01-init-extensions.sql` | Enables the `pgvector` extension on first DB init. |
-| `.env.development` | Local dev config (gitignored) so `make db-up` + `make dev` work out of the box. |
-| `docs/PROJECT_REPORT.md` | This report. |
+### Adicionado
 
-### Modified
-- **`docker-compose.yml`** — `db` service rebuilt: named container `agent-harness-db`, env with
-  safe defaults (no longer hard-fails without `.env`), pgvector init script mounted, `start_period`
-  added to the healthcheck, dropped the obsolete `version:` key.
-- **`Makefile`** — new `db-up` (waits for healthy), `db-down`, `db-logs`, `db-reset` targets + help.
-- **`.gitignore`** — stopped ignoring all of `/.claude/`; now versions the shared config and
-  ignores only `settings.local.json` and `plans/*`.
-- **`AGENTS.md`** — plan path updated `.agent/plans/` → `.claude/plans/`.
+| Caminho | Finalidade |
+|---------|------------|
+| `CODEX.md` | Orientação principal para o Codex: mapa do projeto, comandos de dev, 10 convenções, como criar um agente e armadilhas. |
+| `.codex/settings.json` | Allowlist de permissões migrada da configuração anterior do assistente. |
+| `.codex/commands/new-agent.md` | `/new-agent`: cria o scaffold de um agente completo (pacote + rota + DTO + rate limit). |
+| `.codex/commands/plan.md` | `/plan`: escreve um plano com checkboxes em `.codex/plans/` antes de codar. |
+| `.codex/commands/run.md` | `/run`: sobe DB + API e verifica `/health`. |
+| `.codex/commands/db.md` | `/db up\|down\|logs\|psql\|reset`: gerencia o Postgres local. |
+| `.codex/agents/harness-reviewer.md` | Subagente que revisa diffs contra as convenções do repositório. |
+| `.codex/skills/` | Biblioteca de skills migrada da configuração anterior do assistente. |
+| `.codex/plans/.gitkeep` | Local dos planos de tarefas. |
+| `scripts/postgres/init/01-init-extensions.sql` | Habilita a extensão `pgvector` na primeira inicialização do banco. |
+| `.env.development` | Config local de dev (gitignored) para `make db-up` + `make dev` funcionarem direto. |
+| `docs/PROJECT_REPORT.md` | Este relatório. |
 
-### Removed
-- **`.cursor/`** (rules + gitignore) — Cursor is no longer used; its rules were folded into
-  `CLAUDE.md`.
+### Modificado
 
-### How to run now
+- **`docker-compose.yml`**: serviço `db` reconstruído; container nomeado `agent-harness-db`, env com defaults seguros (não falha mais sem `.env`), script de init do pgvector montado, `start_period` adicionado ao healthcheck e chave obsoleta `version:` removida.
+- **`Makefile`**: novos targets `db-up` (espera ficar healthy), `db-down`, `db-logs`, `db-reset` + help.
+- **`.gitignore`**: deixou de ignorar tudo em `/.codex/`; agora versiona a configuração compartilhada e ignora apenas `settings.local.json` e `plans/*`.
+- **`AGENTS.md`**: caminho de plano atualizado de `.agent/plans/` para `.codex/plans/`.
+
+### Removido
+
+- **`.cursor/`** (rules + gitignore): Cursor não é mais usado; suas regras foram incorporadas ao `CODEX.md`.
+
+### Como Rodar Agora
+
 ```bash
 make install     # uv sync
-make db-up       # Postgres + pgvector, waits until healthy
-# fill OPENAI_API_KEY and JWT_SECRET_KEY in .env.development
-make dev         # API on http://localhost:8000  (Swagger at /docs)
+make db-up       # Postgres + pgvector, espera ficar healthy
+# preencha OPENAI_API_KEY e JWT_SECRET_KEY em .env.development
+make dev         # API em http://localhost:8000 (Swagger em /docs)
 ```
 
 ---
 
-## 2. What this project is
+## 2. O Que Este Projeto É
 
-A **harness for running AI agents in production**. You write the agent's logic; the harness supplies
-the infrastructure every serious agent needs but nobody wants to rebuild:
+Um **harness para executar agentes de IA em produção**. Você escreve a lógica do agente; o harness fornece a infraestrutura que todo agente sério precisa e que ninguém quer reconstruir:
 
-- **API layer** — FastAPI (async, uvloop), JWT auth with multi-session management, per-endpoint
-  rate limiting (slowapi), SSE streaming.
-- **Memory & state** — long-term semantic memory per user (mem0ai + pgvector) with background,
-  non-blocking updates; conversation state persisted via LangGraph `AsyncPostgresSaver` checkpoints.
-- **Observability** — Langfuse tracing on every LLM call; Prometheus metrics; pre-built Grafana
-  dashboards; structured `structlog` logging with request/session/user context binding.
-- **Safety** — guardrails module (content filter, PII detection, safety checks) and an agent
-  middleware pipeline (error handling, logging, summarization, message trimming, memory).
-- **Tools** — built-in tools (web search, "think") plus MCP client support (multi-server, auto
-  reconnect, graceful degradation) and a sample MCP server.
-- **Evaluation** — metric-based eval framework driven by Langfuse traces; metrics are just markdown
-  files (relevancy, helpfulness, conciseness, hallucination, toxicity).
-- **DevOps** — Docker Compose stack (Postgres, Prometheus, Grafana, cAdvisor), per-env configs,
-  Makefile, GitHub Actions.
+- **Camada de API**: FastAPI (async, uvloop), autenticação JWT com gerenciamento de múltiplas sessões, rate limiting por endpoint (slowapi), streaming SSE.
+- **Memória e estado**: memória semântica de longo prazo por usuário (mem0ai + pgvector) com atualizações em background sem bloqueio; estado da conversa persistido via checkpoints `AsyncPostgresSaver` do LangGraph.
+- **Observabilidade**: tracing Langfuse em toda chamada de LLM; métricas Prometheus; dashboards Grafana prontos; logging estruturado com `structlog` e binding de contexto de request/sessão/usuário.
+- **Segurança**: módulo de guardrails (content filter, detecção de PII, safety checks) e pipeline de middleware de agentes (tratamento de erro, logging, sumarização, trimming de mensagens, memória).
+- **Ferramentas**: ferramentas internas (web search, "think") mais suporte a cliente MCP (múltiplos servidores, reconexão automática, degradação graciosa) e servidor MCP de exemplo.
+- **Avaliação**: framework de eval baseado em métricas dirigido por traces do Langfuse; métricas são arquivos markdown (relevancy, helpfulness, conciseness, hallucination, toxicity).
+- **DevOps**: stack Docker Compose (Postgres, Prometheus, Grafana, cAdvisor), configs por ambiente, Makefile, GitHub Actions.
 
-### How it's organized
-An agent is a **self-contained directory** under `src/app/agents/`. Three references ship with it:
-`chatbot` (simplest), `text_to_sql` (skills + tools), `open_deep_research` (multi-subgraph
-supervisor/researcher). The rest of `src/app/core/` is shared infrastructure the agent plugs into.
+### Como Está Organizado
 
-### Request lifecycle (chat)
-```
-Client → FastAPI route (JWT auth + rate limit)
-       → load long-term memory (mem0/pgvector) → build prompt
-       → LangGraph agent (checkpointed state, tools/MCP) with Langfuse tracing
-       → stream/return response
-       → background: extract & store new memories (asyncio task, non-blocking)
-Prometheus scrapes /metrics → Grafana dashboards
+Um agente é um **diretório autocontido** em `src/app/agents/`. Três referências acompanham o projeto: `chatbot` (mais simples), `text_to_sql` (skills + tools), `open_deep_research` (supervisor/researcher com multi-subgraph). O restante de `src/app/core/` é infraestrutura compartilhada conectada ao agente.
+
+### Ciclo de Vida de Request (chat)
+
+```text
+Client -> rota FastAPI (JWT auth + rate limit)
+       -> carrega memória de longo prazo (mem0/pgvector) -> monta prompt
+       -> agente LangGraph (estado com checkpoint, tools/MCP) com tracing Langfuse
+       -> faz stream/retorna resposta
+       -> background: extrai e salva novas memórias (asyncio task, sem bloqueio)
+Prometheus coleta /metrics -> dashboards Grafana
 ```
 
 ---
 
-## 3. Where to take it — high-ROI directions
+## 3. Para Onde Levar: Direções de Alto ROI
 
-The template's value is that the expensive, boring 80% (auth, memory, tracing, persistence, rate
-limiting, evals) is already done. The fastest path to "real and profitable" is to drop a
-**domain-specific agent** into `src/app/agents/` and sell the outcome, not the tech. Candidates,
-roughly by effort-to-return:
+O valor do template é que os 80% caros e pouco glamourosos (auth, memória, tracing, persistência, rate limits, evals) já estão prontos. O caminho mais rápido para algo "real e lucrativo" é colocar um **agente específico de domínio** em `src/app/agents/` e vender o resultado, não a tecnologia. Candidatos por esforço versus retorno:
 
-**A. Vertical support / operations copilot (fastest to revenue).**
-Point the agent at a company's knowledge base + a few tools (order lookup, ticket creation) via MCP.
-The harness already gives you per-user memory (it remembers each customer), tracing (you can prove
-quality to the buyer), and guardrails (PII). Sell as a per-seat or per-resolution SaaS. The
-`text_to_sql` agent is a working starting point for "ask your data" internal tools.
+**A. Copiloto vertical de suporte/operações (mais rápido para receita).**
+Conecte o agente à base de conhecimento de uma empresa + algumas ferramentas (consulta de pedido, abertura de ticket) via MCP. O harness já entrega memória por usuário (lembra cada cliente), tracing (você prova qualidade ao comprador) e guardrails (PII). Venda como SaaS por assento ou por resolução. O agente `text_to_sql` é um ponto de partida funcional para ferramentas internas de "pergunte aos seus dados".
 
-**B. Analytics / "chat with your database" product.**
-`text_to_sql` + the schema-exploration skill is 60% of a self-serve BI assistant. Add row-level
-auth and result caching (cache only successful queries — convention #7) and you have a sellable
-internal-analytics tool. ROI is high because it replaces analyst back-and-forth.
+**B. Produto de analytics / "chat com seu banco".**
+`text_to_sql` + a skill de exploração de schema já são grande parte de um assistente de BI self-service. Adicione auth por linha e cache de resultado (cache apenas de consultas bem-sucedidas, convenção #7) e você terá uma ferramenta interna vendável de analytics. O ROI é alto porque substitui idas e vindas com analistas.
 
-**C. Research / due-diligence automation.**
-`open_deep_research` (supervisor + researcher subgraphs) already does multi-step web research with a
-think tool. Wrap it for a niche (legal, market, competitive intel) with citation enforcement via the
-existing eval metrics (hallucination, relevancy). Charge per report.
+**C. Automação de pesquisa / due diligence.**
+`open_deep_research` (subgraphs supervisor + researcher) já faz pesquisa web em múltiplas etapas com uma ferramenta `think`. Empacote para um nicho (jurídico, mercado, inteligência competitiva) com enforcement de citações pelas métricas de eval existentes (hallucination, relevancy). Cobre por relatório.
 
-**D. Platform play — multi-tenant agent hosting.**
-The harness is close to a "Fly.io for agents." To get there: add tenant isolation (schema-per-tenant
-or row-level security on Postgres), usage metering (you already emit Prometheus metrics — bill on
-LLM inference duration/tokens), and a self-serve agent registry. Higher effort, but the moat is real.
+**D. Plataforma de hosting multi-tenant de agentes.**
+O harness está perto de um "Fly.io para agentes". Para chegar lá: adicione isolamento de tenants (schema por tenant ou row-level security no Postgres), medição de uso (você já emite métricas Prometheus; cobre por duração/tokens de inferência LLM) e um registry self-service de agentes. Mais esforço, mas com uma defesa competitiva real.
 
-### Concrete next steps to make any of the above production-real
-1. **Cost & billing** — emit token/cost per request into Prometheus and surface a per-tenant cost
-   dashboard in Grafana (the plumbing is already there).
-2. **Fix the schema story** — `schema.sql` is legacy SQLite DDL; standardize on Alembic migrations
-   for the app tables so prod deploys are reproducible.
-3. **Eval gate in CI** — run the eval framework on a fixed trace set in GitHub Actions and fail the
-   build if hallucination/relevancy regresses. This is what lets you ship agent changes safely.
-4. **Harden guardrails** — the guardrail middleware exists; wire it into every agent's pipeline and
-   add an output moderation pass before responses reach users.
-5. **Load & resilience** — connection-pool tuning is present; add a queue/back-pressure layer for
-   LLM calls and circuit breakers (tenacity is already a dependency).
+### Próximos Passos Concretos para Produção
 
-The short version: **don't rebuild the harness — pick one vertical from A–C, ship the outcome, and
-use the built-in evals + tracing as your quality and sales proof.**
+1. **Custo e billing**: emita token/custo por request no Prometheus e mostre um dashboard de custo por tenant no Grafana.
+2. **Arrumar a história do schema**: `schema.sql` é DDL legado SQLite; padronize em migrations Alembic para tabelas da app, garantindo deploys reprodutíveis.
+3. **Gate de eval no CI**: rode o framework de eval em um conjunto fixo de traces no GitHub Actions e falhe o build se hallucination/relevancy regredir.
+4. **Endurecer guardrails**: o middleware de guardrail já existe; conecte-o em todo pipeline de agente e adicione moderação de saída antes de respostas chegarem aos usuários.
+5. **Carga e resiliência**: tuning de connection pool já existe; adicione uma fila/back-pressure para chamadas de LLM e circuit breakers (tenacity já é dependência).
+
+Resumo: **não reconstrua o harness; escolha uma vertical de A a C, entregue o resultado e use evals + tracing integrados como prova de qualidade e argumento de venda.**

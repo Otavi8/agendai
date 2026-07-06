@@ -1,80 +1,78 @@
-# Text-to-SQL Deep Agent
+# Deep Agent Text-to-SQL
 
-A natural language to SQL query agent powered by LangChain's **Deep Agents** framework.  This is an advanced version of a text-to-SQL agent with planning, filesystem, and subagent capabilities.
+Um agente de consulta SQL a partir de linguagem natural, movido pelo framework **Deep Agents** do LangChain. Esta é uma versão avançada de um agente text-to-SQL com capacidades de planejamento, filesystem e subagentes.
 
-## What is Deep Agents?
+## O Que é Deep Agents?
 
-Deep Agents is a sophisticated agent framework built on LangGraph that provides:
+Deep Agents é um framework sofisticado de agentes construído sobre LangGraph que fornece:
 
-- **Planning capabilities** - Break down complex tasks with `write_todos` tool
-- **Filesystem backend** - Save and retrieve context with file operations
-- **Subagent spawning** - Delegate specialized tasks to focused agents
-- **Context management** - Prevent context window overflow on complex tasks
+- **Capacidades de planejamento**: divide tarefas complexas com a ferramenta `write_todos`.
+- **Backend de filesystem**: salva e recupera contexto com operações de arquivo.
+- **Criação de subagentes**: delega tarefas especializadas para agentes focados.
+- **Gerenciamento de contexto**: evita estouro da janela de contexto em tarefas complexas.
 
-## Demo Database
+## Banco de Demonstração
 
-Uses the [Chinook database](https://github.com/lerocha/chinook-database) - a sample database representing a digital media store.
+Usa o [banco Chinook](https://github.com/lerocha/chinook-database), um banco de exemplo que representa uma loja de mídia digital.
 
-## Quick Start
+## Início Rápido
 
+### Instalação
 
-### Installation
-
-
-1. Download the Chinook database:
+1. Baixe o banco Chinook:
 
 ```bash
-# Download the SQLite database file
+# Baixa o arquivo SQLite
 curl -L -o chinook.db https://github.com/lerocha/chinook-database/raw/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite
 ```
 
-### Configuration
+### Configuração
 
-Deep Agents uses **progressive disclosure** with memory files and skills:
+Deep Agents usa **divulgação progressiva** com arquivos de memória e skills:
 
-**AGENTS.md** (always loaded) - Contains:
+**AGENTS.md** (sempre carregado) contém:
 
-- Agent identity and role
-- Core principles and safety rules
-- General guidelines
-- Communication style
+- Identidade e papel do agente.
+- Princípios centrais e regras de segurança.
+- Diretrizes gerais.
+- Estilo de comunicação.
 
-**skills/** (loaded on-demand) - Specialized workflows:
+**skills/** (carregado sob demanda) contém workflows especializados:
 
-- **query-writing** - How to write and execute SQL queries (simple and complex)
-- **schema-exploration** - How to discover database structure and relationships
+- **query-writing**: como escrever e executar consultas SQL simples e complexas.
+- **schema-exploration**: como descobrir a estrutura e os relacionamentos do banco.
 
-The agent sees skill descriptions in its context but only loads the full SKILL.md instructions when it determines which skill is needed for the current task. This **progressive disclosure** pattern keeps context efficient while providing deep expertise when needed.
+O agente vê as descrições das skills no contexto, mas só carrega as instruções completas do `SKILL.md` quando determina qual skill é necessária para a tarefa atual. Esse padrão de **divulgação progressiva** mantém o contexto eficiente e oferece profundidade quando necessário.
 
-## Example Queries
+## Exemplos de Consultas
 
-### Simple Query
+### Consulta Simples
 
-```
+```text
 "How many customers are from Canada?"
 ```
 
-The agent will directly query and return the count.
+O agente consulta diretamente e retorna a contagem.
 
-### Complex Query with Planning
+### Consulta Complexa com Planejamento
 
-```
+```text
 "Which employee generated the most revenue and from which countries?"
 ```
 
-The agent will:
+O agente irá:
 
-1. Use `write_todos` to plan the approach
-2. Identify required tables (Employee, Invoice, Customer)
-3. Plan the JOIN structure
-4. Execute the query
-5. Format results with analysis
+1. Usar `write_todos` para planejar a abordagem.
+2. Identificar tabelas necessárias (`Employee`, `Invoice`, `Customer`).
+3. Planejar a estrutura de `JOIN`.
+4. Executar a consulta.
+5. Formatar os resultados com análise.
 
-## Text to Sql Agent Output Example
+## Exemplo de Saída do Agente Text-to-SQL
 
-The Deep Agent shows its reasoning process:
+O Deep Agent mostra seu processo de raciocínio:
 
-```
+```text
 Question: Which employee generated the most revenue by country?
 
 [Planning Step]

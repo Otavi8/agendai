@@ -1,98 +1,105 @@
-# Agent Harness template - Production-Ready AI Agent Infrastructure
+# Template Agent Harness: Infraestrutura de Agentes de IA Pronta para Produção
 
-A harness for building and running AI agents in production. 
-You define the agent logic; the harness provides authentication, memory, observability, state persistence, rate limiting, guardrails and monitoring out of the box.
+Um harness para criar e executar agentes de IA em produção.
+Você define a lógica do agente; o harness fornece autenticação, memória, observabilidade, persistência de estado, rate limiting, guardrails e monitoramento.
 
-Built with **LangGraph**, **FastAPI**, **Langfuse**, **PostgreSQL + pgvector**, and **MCP**.
+Construído com **LangGraph**, **FastAPI**, **Langfuse**, **PostgreSQL + pgvector** e **MCP**.
 
-## Architecture
+## Arquitetura
 
 ```mermaid
 flowchart LR
   Client --> FastAPI
-  FastAPI --> Auth["JWT Auth"]
+  FastAPI --> Auth["Auth JWT"]
   Auth --> Harness["Agent Harness"]
   Harness --> LangGraph
-  LangGraph --> Tools["Built-in Tools"]
-  LangGraph --> MCP["MCP Servers"]
-  Harness --> Memory["Long-Term Memory\n(mem0 + pgvector)"]
-  Harness --> Checkpoint["State Persistence\n(AsyncPostgresSaver)"]
-  Harness --> Langfuse["Observability\n(Langfuse)"]
+  LangGraph --> Tools["Ferramentas internas"]
+  LangGraph --> MCP["Servidores MCP"]
+  Harness --> Memory["Memória de longo prazo\n(mem0 + pgvector)"]
+  Harness --> Checkpoint["Persistência de estado\n(AsyncPostgresSaver)"]
+  Harness --> Langfuse["Observabilidade\n(Langfuse)"]
   FastAPI --> Prometheus
   Prometheus --> Grafana
 ```
 
-Your agent is a self-contained directory under `src/app/agents/`.  The harness handles everything else.
+Seu agente é um diretório autocontido em `src/app/agents/`. O harness cuida de todo o resto.
 
-## What You Get
-**API Layer**
-- FastAPI with async endpoints and uvloop optimization
-- JWT-based authentication with session management (register, login, multi-session)
-- Per-endpoint rate limiting via slowapi
-- Streaming responses (SSE) for real-time chat
+## O Que Você Recebe
 
-**Memory and State**
-- Long-term semantic memory via mem0ai + pgvector (per-user, automatic extraction and retrieval)
-- Conversation state persistence via LangGraph `AsyncPostgresSaver` checkpointing
-- Background memory updates that don't block responses
+**Camada de API**
 
-**Observability**
-- Langfuse tracing on all LLM calls with environment and session metadata
-- Prometheus metrics for API performance, rate limits, LLM inference duration
-- Grafana dashboards (pre-configured)
-- Structured logging with structlog: JSON in production, colored console in development
-- Automatic request context binding (request_id, session_id, user_id)
+- FastAPI com endpoints assíncronos e otimização com uvloop.
+- Autenticação baseada em JWT com gerenciamento de sessões (register, login, múltiplas sessões).
+- Rate limiting por endpoint via slowapi.
+- Respostas em streaming (SSE) para chat em tempo real.
 
-**LLM Management**
-- Automatic retries with exponential backoff
+**Memória e Estado**
 
-**Evaluation Framework**
-- Metric-based evaluation of model outputs using Langfuse traces
-- Built-in metrics: relevancy, helpfulness, conciseness, hallucination, toxicity
-- JSON reports with per-metric and per-trace breakdowns
-- Interactive CLI with colored output
+- Memória semântica de longo prazo via mem0ai + pgvector (por usuário, com extração e recuperação automáticas).
+- Persistência de estado da conversa via checkpointing `AsyncPostgresSaver` do LangGraph.
+- Atualizações de memória em background, sem bloquear respostas.
+
+**Observabilidade**
+
+- Tracing Langfuse em todas as chamadas de LLM, com metadados de ambiente e sessão.
+- Métricas Prometheus para performance da API, rate limits e duração de inferência da LLM.
+- Dashboards Grafana pré-configurados.
+- Logging estruturado com structlog: JSON em produção, console colorido em desenvolvimento.
+- Binding automático de contexto de request (`request_id`, `session_id`, `user_id`).
+
+**Gerenciamento de LLM**
+
+- Retries automáticos com exponential backoff.
+
+**Framework de Avaliação**
+
+- Avaliação de saídas do modelo baseada em métricas usando traces do Langfuse.
+- Métricas internas: relevancy, helpfulness, conciseness, hallucination, toxicity.
+- Relatórios JSON com detalhamento por métrica e por trace.
+- CLI interativa com saída colorida.
 
 **DevOps**
-- Docker Compose stack: PostgreSQL (pgvector), Prometheus, Grafana, cAdvisor
-- Environment-specific configs (`.env.development`, `.env.staging`, `.env.production`)
-- Makefile for all common operations
-- GitHub Actions CI/CD workflow
 
-## Build Your Own Agent
+- Stack Docker Compose: PostgreSQL (pgvector), Prometheus, Grafana, cAdvisor.
+- Configurações por ambiente (`.env.development`, `.env.staging`, `.env.production`).
+- Makefile para operações comuns.
+- Workflow CI/CD com GitHub Actions.
 
-Every agent lives in its own directory under `src/app/agents/`. 
-The included `chatbot`, `text_to_sql` and `open_deep_research` agents is a working reference.
+## Crie Seu Próprio Agente
 
-### 1. Create the agent directory
+Cada agente vive em seu próprio diretório em `src/app/agents/`.
+Os agentes incluídos `chatbot`, `text_to_sql` e `open_deep_research` são referências funcionais.
 
-```
+### 1. Crie o diretório do agente
+
+```text
 src/app/agents/my_agent/
-  __init__.py          # load_system_prompt() helper
-  agent.py             # Your agent class
-  system.md            # System prompt template
+  __init__.py          # helper load_system_prompt()
+  agent.py             # sua classe de agente
+  system.md            # template de system prompt
   tools/
-    __init__.py        # Export your tools list
-    my_tool.py         # Custom tool implementations
+    __init__.py        # exporta sua lista de ferramentas
+    my_tool.py         # implementações de ferramentas customizadas
 ```
 
-### 2. Define the system prompt
+### 2. Defina o system prompt
 
-`system.md` supports `{long_term_memory}` and `{current_date_and_time}` placeholders, plus any custom kwargs you pass.
+`system.md` suporta os placeholders `{long_term_memory}` e `{current_date_and_time}`, além de kwargs customizados que você passar.
 
 ```markdown
 # Name: {agent_name}
-# Role: Your agent's role description
+# Role: Descrição do papel do seu agente
 
-Instructions for the agent.
+Instruções para o agente.
 
-# What you know about the user
+# O que você sabe sobre o usuário
 {long_term_memory}
 
-# Current date and time
+# Data e hora atuais
 {current_date_and_time}
 ```
 
-### 3. Wire it to an API endpoint
+### 3. Conecte a um endpoint de API
 
 ```python
 from src.app.agents.my_agent.agent import MyAgent
@@ -104,43 +111,43 @@ async def get_my_agent() -> MyAgent:
     return agent
 ```
 
-Then use `agent.agent_invoke()` or `agent.agent_invoke_stream()` in your route handler, exactly as `src/app/api/v1/chatbot.py` does with `AgentExample1`.
+Depois use `agent.agent_invoke()` ou `agent.agent_invoke_stream()` no handler da rota, exatamente como `src/app/api/v1/chatbot.py` faz com `AgentExample1`.
 
-## Quick Start
+## Início Rápido
 
-### Prerequisites
+### Pré-requisitos
 
 - Python 3.13+
-- PostgreSQL with pgvector extension
-- Docker and Docker Compose (optional)
+- PostgreSQL com extensão pgvector
+- Docker e Docker Compose (opcional)
 
 ### Setup
 
 ```bash
-# Clone and install
+# Clone e instale
 git clone <repository-url>
 cd <project-directory>
 uv sync
 
-# Configure environment
+# Configure o ambiente
 cp .env.example .env.development
-# Edit .env.development with your keys (OPENAI_API_KEY, POSTGRES_*, LANGFUSE_*, JWT_SECRET_KEY)
+# Edite .env.development com suas chaves (OPENAI_API_KEY, POSTGRES_*, LANGFUSE_*, JWT_SECRET_KEY)
 
-# Run
+# Rode
 make dev
 ```
+
 Swagger UI: `http://localhost:8000/docs`
 
-### Test
+### Testes
 
 ```bash
- uv run pytest tests/
+uv run pytest tests/
 ```
 
+### Banco de Dados
 
-### Database
-
-The ORM creates tables automatically. If needed, run `schema.sql` manually. Configure in your `.env` file:
+O ORM cria as tabelas automaticamente. Se necessário, rode `schema.sql` manualmente. Configure no seu arquivo `.env`:
 
 ```bash
 POSTGRES_HOST=localhost
@@ -153,26 +160,27 @@ POSTGRES_PASSWORD=postgres
 ### Docker
 
 ```bash
-# Build and run for a specific environment
+# Build e execução para um ambiente específico
 make docker-build-env ENV=development
 make docker-run-env ENV=development
 
-# Full stack (API + PostgreSQL + Prometheus + Grafana + cAdvisor)
+# Stack completa (API + PostgreSQL + Prometheus + Grafana + cAdvisor)
 make docker-compose-up ENV=development
 ```
 
-Monitoring endpoints:
+Endpoints de monitoramento:
+
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000/d/llm-latency/llm-observability` (admin/admin)
 
-## Configuration
+## Configuração
 
-Environment-specific files: `.env.development`, `.env.staging`, `.env.production`
+Arquivos por ambiente: `.env.development`, `.env.staging`, `.env.production`
 
-Key variables:
+Variáveis principais:
 
-| Category | Variable | Default |
-|----------|----------|---------|
+| Categoria | Variável | Padrão |
+|----------|----------|--------|
 | App | `APP_ENV` | `development` |
 | LLM | `OPENAI_API_KEY` | -- |
 | LLM | `DEFAULT_LLM_MODEL` | `gpt-5-mini` |
@@ -190,103 +198,104 @@ Key variables:
 | MCP | `MCP_HOSTNAMES_CSV` | -- |
 | Rate Limit | `RATE_LIMIT_DEFAULT` | `200/day, 50/hour` |
 
-See `.env.example` for the complete list.
+Veja `.env.example` para a lista completa.
 
-## Key Capabilities
+## Capacidades Principais
 
-### Long-Term Memory
+### Memória de Longo Prazo
 
-Powered by mem0ai with pgvector. Memories are stored per user and retrieved by semantic similarity before each agent invocation. Memory updates happen in the background via `asyncio.create_task` so they never block the response.
-
+Movida por mem0ai com pgvector. As memórias são armazenadas por usuário e recuperadas por similaridade semântica antes de cada invocação do agente. Atualizações de memória acontecem em background via `asyncio.create_task`, portanto nunca bloqueiam a resposta.
 
 ### Model Context Protocol (MCP)
 
-MCP sessions are initialized at application startup and persist for the application lifetime. Features:
-- Multi-server support via `MCP_HOSTNAMES_CSV`
-- Automatic reconnection on `ClosedResourceError` with configurable retries
-- Graceful degradation: the app continues with built-in tools if MCP servers are unavailable
-- Includes a sample MCP server (`src/mcp/server.py`)
+Sessões MCP são inicializadas no startup da aplicação e persistem durante a vida do processo. Recursos:
 
-Start MCP server: `python src/mcp/server.py`
+- Suporte a múltiplos servidores via `MCP_HOSTNAMES_CSV`.
+- Reconexão automática em `ClosedResourceError` com retries configuráveis.
+- Degradação graciosa: o app continua com ferramentas internas se os servidores MCP estiverem indisponíveis.
+- Inclui servidor MCP de exemplo (`src/mcp/server.py`).
 
-### Structured Logging
+Iniciar servidor MCP: `python src/mcp/server.py`
 
-All logs use structlog with `lowercase_underscore` event names and kwargs (no f-strings). Request context (session_id, user_id) is automatically bound via middleware. Format switches between colored console (development) and JSON (production).
+### Logging Estruturado
 
-### Model Evaluation
+Todos os logs usam structlog com nomes de evento em `lowercase_underscore` e kwargs (sem f-strings). O contexto da request (`session_id`, `user_id`) é vinculado automaticamente via middleware. O formato alterna entre console colorido (development) e JSON (production).
+
+### Avaliação de Modelo
 
 ```bash
-make eval                # Interactive mode
-make eval-quick          # Default settings, no prompts
-make eval-no-report      # Skip report generation
+make eval                # modo interativo
+make eval-quick          # configurações padrão, sem prompts
+make eval-no-report      # pula geração de relatório
 ```
 
-Metrics are defined as markdown files in `src/evals/metrics/prompts/`. Add a new `.md` file and the evaluator discovers it automatically. Reports are saved to `src/evals/reports/`.
+As métricas são definidas como arquivos markdown em `src/evals/metrics/prompts/`. Adicione um novo `.md` e o avaliador descobre automaticamente. Relatórios são salvos em `src/evals/reports/`.
 
-### Monitoring
+### Monitoramento
 
-Docker Compose includes Prometheus, Grafana, and cAdvisor. Pre-configured dashboards cover:
-- API request rate, latency, and error rate
-- LLM inference duration by model
-- Rate limiting statistics
-- System resource usage
+O Docker Compose inclui Prometheus, Grafana e cAdvisor. Dashboards pré-configurados cobrem:
 
-## API Reference
+- Taxa de requests da API, latência e taxa de erro.
+- Duração de inferência de LLM por modelo.
+- Estatísticas de rate limiting.
+- Uso de recursos do sistema.
 
-### Authentication
+## Referência da API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Register a new user |
-| POST | `/api/v1/auth/login` | Login, receive JWT token |
-| POST | `/api/v1/auth/session` | Create a chat session |
-| GET | `/api/v1/auth/sessions` | List user sessions |
-| PATCH | `/api/v1/auth/session/{id}/name` | Rename a session |
-| DELETE | `/api/v1/auth/session/{id}` | Delete a session |
+### Autenticação
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| POST | `/api/v1/auth/register` | Registra um novo usuário |
+| POST | `/api/v1/auth/login` | Login, retorna token JWT |
+| POST | `/api/v1/auth/session` | Cria uma sessão de chat |
+| GET | `/api/v1/auth/sessions` | Lista sessões do usuário |
+| PATCH | `/api/v1/auth/session/{id}/name` | Renomeia uma sessão |
+| DELETE | `/api/v1/auth/session/{id}` | Exclui uma sessão |
 
 ### Chat
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/chatbot/chat` | Send message, receive response |
-| POST | `/api/v1/chatbot/chat/stream` | Send message, receive SSE stream |
-| GET | `/api/v1/chatbot/messages` | Get conversation history |
-| DELETE | `/api/v1/chatbot/messages` | Clear conversation history |
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| POST | `/api/v1/chatbot/chat` | Envia mensagem e recebe resposta |
+| POST | `/api/v1/chatbot/chat/stream` | Envia mensagem e recebe stream SSE |
+| GET | `/api/v1/chatbot/messages` | Obtém histórico da conversa |
+| DELETE | `/api/v1/chatbot/messages` | Limpa histórico da conversa |
 
-### Health and Monitoring
+### Health e Monitoramento
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/health` | Health check with DB status |
-| GET | `/metrics` | Prometheus metrics |
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/api/v1/health` | Health check com status do banco |
+| GET | `/metrics` | Métricas Prometheus |
 
-Full API docs available at `/docs` (Swagger) and `/redoc` when the application is running.
+Documentação completa da API disponível em `/docs` (Swagger) e `/redoc` quando a aplicação está rodando.
 
-## CLI Client
+## Cliente CLI
 
 ```bash
-# Register and chat
+# Registrar e conversar
 python src/cli/api_client.py --email user@example.com --password YourPass123 --register
 
-# Login and chat
+# Login e chat
 python src/cli/api_client.py --email user@example.com --password YourPass123
 
-# With custom message
+# Com mensagem customizada
 python src/cli/api_client.py --email user@example.com --password YourPass123 --message "What can you do?"
 ```
 
-The CLI enters interactive mode after the first message.
+A CLI entra em modo interativo após a primeira mensagem.
 
-## License
+## Licença
 
-This project is licensed under the terms specified in the [LICENSE](LICENSE) file.
+Este projeto é licenciado conforme os termos especificados no arquivo [LICENSE](LICENSE).
 
-## Contributing
+## Contribuição
 
-Contributions are welcome. Please ensure:
+Contribuições são bem-vindas. Garanta que:
 
-1. Code follows the project's coding standards
-2. All tests pass
-3. New features include appropriate tests
-4. Documentation is updated
-5. Commit messages follow conventional commits format
+1. O código siga os padrões de codificação do projeto.
+2. Todos os testes passem.
+3. Novas features incluam testes apropriados.
+4. A documentação seja atualizada.
+5. Mensagens de commit sigam o formato conventional commits.

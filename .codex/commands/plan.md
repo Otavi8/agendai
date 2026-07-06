@@ -6,7 +6,7 @@ argument-hint: <task description>
 Plan this task before touching any code: $ARGUMENTS
 
 1. Read the relevant existing implementation first (find the closest reference in the codebase).
-2. Create `.claude/plans/<kebab-case-task-name>.md` containing:
+2. Create `.codex/plans/<kebab-case-task-name>.md` containing:
    - A one-line goal.
    - A complexity marker at the top: ✅ Simple / ⚠️ Medium / 🔴 Complex.
    - The implementation broken into GitHub-style checkboxes: `- [ ] Step description`,

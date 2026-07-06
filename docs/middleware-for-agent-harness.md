@@ -1,69 +1,69 @@
-# How middleware shapes a production agent harness
+# Como o Middleware Molda um Agent Harness de Produção
 
-An agent harness is the glue between a language model and everything else: tools, data, memory, and your app’s request/response boundary. At heart it is an LLM in a loop calling tools. Production is never just that loop. You want policies that always run, context that stays bounded, logging and metrics, and predictable behavior when something breaks.
+Um agent harness é a cola entre um modelo de linguagem e todo o resto: ferramentas, dados, memória e a fronteira request/response da sua aplicação. No centro, há uma LLM em loop chamando ferramentas. Produção nunca é apenas esse loop. Você quer políticas que sempre rodam, contexto com tamanho controlado, logs e métricas, e comportamento previsível quando algo quebra.
 
-This doc is about agent middleware in this repo: a composable layer around invocations. It sits apart from the HTTP stack and from the raw LangGraph or Deep Agents graph. The idea matches what people call “agent middleware” in LangChain-style stacks: hooks around the loop, composable ordering, and room for both framework defaults and your own code. The code lives in `src/app/core/middleware/`; examples refer to this tree, not generic tutorials.
+Este documento trata do middleware de agentes neste repositório: uma camada componível ao redor das invocações. Ela fica separada da stack HTTP e do grafo bruto LangGraph ou Deep Agents. A ideia é parecida com o que costuma ser chamado de "agent middleware" em stacks estilo LangChain: hooks ao redor do loop, ordenação componível e espaço tanto para defaults do framework quanto para seu próprio código. O código vive em `src/app/core/middleware/`; os exemplos se referem a essa árvore, não a tutoriais genéricos.
 
-For the wider harness story (FastAPI, auth, checkpointing, mem0, Langfuse, MCP, and the rest), see [ARTICLE.md](./ARTICLE.md).
+Para a história mais ampla do harness (FastAPI, auth, checkpointing, mem0, Langfuse, MCP e o restante), veja [ARTICLE.md](./ARTICLE.md).
 
 ---
 
-## What “harness” means here
+## O Que "Harness" Significa Aqui
 
-There is no single “harness” class. In this stack it is three things together:
+Não existe uma única classe chamada "harness". Nesta stack, ele é a soma de três coisas:
 
-- API and cross-request behavior: JWT, rate limits, metrics, request-scoped logging.
-- Per-invocation agent behavior: graphs, tools, memory, guardrails.
-- Agent middleware: a pipeline around each `agent_invoke` and, when wired up, around each model and tool step inside a graph.
+- Comportamento de API e cross-request: JWT, rate limits, métricas, logging com escopo de request.
+- Comportamento do agente por invocação: grafos, ferramentas, memória, guardrails.
+- Middleware de agente: um pipeline ao redor de cada `agent_invoke` e, quando conectado, ao redor de cada etapa de modelo e ferramenta dentro de um grafo.
 
-The loop is still the usual one: the model proposes actions, tools run, state updates, repeat. Middleware is where you hang behavior that would otherwise get copy-pasted into every node.
+O loop ainda é o normal: o modelo propõe ações, ferramentas rodam, o estado atualiza, repete. Middleware é onde você pendura comportamentos que, de outro modo, seriam copiados em todo nó.
 
 ```mermaid
 flowchart LR
-  subgraph http [Request scope]
+  subgraph http [Escopo da request]
     Client --> FastAPI
-    FastAPI --> HttpMw["HTTP middleware\ne.g. logging context, metrics"]
-    HttpMw --> Route["Route handler"]
+    FastAPI --> HttpMw["Middleware HTTP\nex.: contexto de log, métricas"]
+    HttpMw --> Route["Handler da rota"]
   end
-  Route --> Pipeline["AgentPipeline\n(agent middleware)"]
-  Pipeline --> Graph["LangGraph or\nDeep Agent"]
+  Route --> Pipeline["AgentPipeline\n(middleware de agente)"]
+  Pipeline --> Graph["LangGraph ou\nDeep Agent"]
   Graph --> Tools["Tools, MCP, DB"]
 ```
 
 ---
 
-## Why touch the harness at all?
+## Por Que Mexer no Harness?
 
-Prompts, tool lists, and model choice are easy to vary per agent. Other needs hit every step: block or redact PII, trim or summarize context before the model runs, log tool names, bump error metrics, load and update long-term memory. If you sprinkle `if` blocks through each node, the graph gets hard to test and hard to reuse.
+Prompts, listas de ferramentas e escolha de modelo são fáceis de variar por agente. Outras necessidades aparecem em toda etapa: bloquear ou redigir PII, aparar ou resumir contexto antes do modelo rodar, logar nomes de ferramentas, incrementar métricas de erro, carregar e atualizar memória de longo prazo. Se você espalha blocos `if` por cada nó, o grafo fica difícil de testar e reutilizar.
 
-This project’s answer is agent middleware: a small hook surface and one pipeline per agent, with an ordered list of middleware classes.
+A resposta deste projeto é middleware de agente: uma superfície pequena de hooks e um pipeline por agente, com uma lista ordenada de classes de middleware.
 
 ---
 
-## Hook names: elsewhere vs this repo
+## Nomes dos Hooks: Outros Lugares vs. Este Repositório
 
-You might see `before_agent`, `before_model`, `wrap_model_call`, `wrap_tool_call`, `after_agent` in other docs. Here the contract is the abstract [`AgentMiddleware`](../src/app/core/middleware/types.py) in `src/app/core/middleware/types.py`. Same shape of idea, different method names. Rough mapping:
+Você pode ver `before_agent`, `before_model`, `wrap_model_call`, `wrap_tool_call`, `after_agent` em outras documentações. Aqui, o contrato é a classe abstrata [`AgentMiddleware`](../src/app/core/middleware/types.py) em `src/app/core/middleware/types.py`. Mesma ideia geral, nomes diferentes. Mapeamento aproximado:
 
-| Idea | In this codebase | Typical use |
-|------|------------------|-------------|
-| Once at start of an invocation | `before_invoke` | Load memory, validate input, short-circuit bad requests (early result, skip graph). |
-| Once after the graph returns | `after_invoke` (runs in reverse registration order) | Post-process final messages, background memory update. |
-| Before each LLM call | `before_model_call` | Summarize or trim message history, structured logging. |
-| After each LLM response | `after_model_call` | Logging or post-processing of the model message. |
-| Before each tool execution | `before_tool_call` | Observe or adjust tool arguments. |
-| After each tool result | `after_tool_call` | Observe or transform tool output. |
-| On exception from the graph | `on_error` | Safe empty result in production, or re-raise in dev. |
-| End-to-end wrap of model or tool | No single `wrap_model_call` / `wrap_tool_call` | Pair `before_*` and `after_*`, plus call-site helpers like `model_invoke_with_metrics` and model `.with_retry()` in the chatbot. |
+| Ideia | Neste codebase | Uso típico |
+|------|----------------|------------|
+| Uma vez no início da invocação | `before_invoke` | Carregar memória, validar input, interromper requests ruins (resultado antecipado, pula grafo). |
+| Uma vez depois do grafo retornar | `after_invoke` (roda em ordem inversa de registro) | Pós-processar mensagens finais, atualizar memória em background. |
+| Antes de cada chamada de LLM | `before_model_call` | Resumir ou aparar histórico de mensagens, logging estruturado. |
+| Depois de cada resposta da LLM | `after_model_call` | Logging ou pós-processamento da mensagem do modelo. |
+| Antes de cada execução de ferramenta | `before_tool_call` | Observar ou ajustar argumentos da ferramenta. |
+| Depois de cada resultado de ferramenta | `after_tool_call` | Observar ou transformar saída da ferramenta. |
+| Em exceção do grafo | `on_error` | Resultado vazio seguro em produção ou relançar em dev. |
+| Wrapper fim a fim de modelo ou ferramenta | Sem `wrap_model_call` / `wrap_tool_call` único | Combine `before_*` e `after_*`, mais helpers de call-site como `model_invoke_with_metrics` e `.with_retry()` no chatbot. |
 
-`before_model_call` and `after_model_call` only run if the graph node that talks to the model goes through the pipeline’s `MiddlewareManager`. The chatbot does that in `_chat_node` and `_tool_call_node` via `self._pipeline.manager` and `run_before_model_call`, `run_after_model_call`, `run_before_tool_call`, `run_after_tool_call`. That is cooperative: the pipeline and the nodes agree on the contract. Middleware is not implicit. Agents with a closed loop (for example Deep Agents from `create_deep_agent`) do not get those per-step hooks unless the framework calls them; this repo wraps the whole `ainvoke` in an outer `AgentPipeline` and can still attach LangChain `middleware` on the inner agent when needed.
+`before_model_call` e `after_model_call` só rodam se o nó do grafo que fala com o modelo passar pelo `MiddlewareManager` do pipeline. O chatbot faz isso em `_chat_node` e `_tool_call_node` via `self._pipeline.manager` e `run_before_model_call`, `run_after_model_call`, `run_before_tool_call`, `run_after_tool_call`. Isso é cooperativo: o pipeline e os nós concordam com o contrato. Middleware não é implícito. Agentes com loop fechado (por exemplo Deep Agents de `create_deep_agent`) não recebem esses hooks por etapa a menos que o framework os chame; este repo envolve o `ainvoke` inteiro em um `AgentPipeline` externo e ainda pode anexar `middleware` do LangChain no agente interno quando necessário.
 
-Invocation state lives in [`AgentContext`](../src/app/core/middleware/types.py): `messages`, `session_id`, `user_id`, `config` (Langfuse callbacks, thread id via `build_invoke_config`), `agent_name`, and a `metadata` dict middleware can read and write (for example `long_term_memory` from `MemoryMiddleware`).
+O estado da invocação vive em [`AgentContext`](../src/app/core/middleware/types.py): `messages`, `session_id`, `user_id`, `config` (callbacks Langfuse, thread id via `build_invoke_config`), `agent_name` e um dict `metadata` que middlewares podem ler e escrever (por exemplo `long_term_memory` do `MemoryMiddleware`).
 
-[`MiddlewareManager`](../src/app/core/middleware/pipeline.py) runs `before_*` in registration order and `after_*` in reverse order, same nesting feel as HTTP middleware stacks.
+[`MiddlewareManager`](../src/app/core/middleware/pipeline.py) roda `before_*` na ordem de registro e `after_*` na ordem inversa, com sensação parecida com stacks de middleware HTTP.
 
 ```mermaid
 flowchart TB
-  subgraph invoke [Single agent_invoke]
+  subgraph invoke [Um agent_invoke]
     A[before_invoke M1] --> B[before_invoke M2]
     B --> C{core invoke}
     C --> D[after_invoke M2]
@@ -73,80 +73,80 @@ flowchart TB
 
 ---
 
-## `AgentPipeline` and `MiddlewareManager`
+## `AgentPipeline` e `MiddlewareManager`
 
-[`AgentPipeline`](../src/app/core/middleware/pipeline.py) takes a list of middleware instances and an `invoke_fn` (the core graph or agent call). `run`:
+[`AgentPipeline`](../src/app/core/middleware/pipeline.py) recebe uma lista de instâncias de middleware e uma `invoke_fn` (a chamada central do grafo ou agente). `run`:
 
-1. Sets `active_ctx` on the manager so nodes can read the current `AgentContext`.
-2. Runs `run_before_invoke`; if any middleware returns non-`None`, the graph is skipped (guardrail short-circuit).
-3. Calls the core function; on exception, runs `on_error` until something returns a result, or the exception bubbles out.
-4. Runs `run_after_invoke` in reverse order.
-5. Clears `active_ctx` in `finally`.
+1. Define `active_ctx` no manager para que nós possam ler o `AgentContext` atual.
+2. Roda `run_before_invoke`; se qualquer middleware retornar algo diferente de `None`, o grafo é pulado (short-circuit de guardrail).
+3. Chama a função central; em exceção, roda `on_error` até algo retornar um resultado, ou a exceção subir.
+4. Roda `run_after_invoke` em ordem inversa.
+5. Limpa `active_ctx` em `finally`.
 
-That gives you one place for logging, error policy, and memory without duplicating it across agents.
-
----
-
-## Examples from this repo
-
-Below is how the tree is actually used, not a third-party walkthrough.
-
-### Business logic and compliance
-
-Some rules should not live only in a prompt. Content policy and PII handling are deterministic and should run on every request.
-
-- [`GuardrailMiddleware`](../src/app/core/middleware/guardrail_middleware.py): `before_invoke` (content filter, block some PII on input), `after_invoke` (redact PII on assistant output, optional async safety check). It can return early from `before_invoke` so the model never runs on disallowed input.
-- The text-to-SQL agent uses the same outer pipeline for logging, errors, and guardrails, and passes LangChain `PIIMiddleware("email")` into `create_deep_agent` in `src/app/agents/text_to_sql/text_sql_agent.py`. Harness-level middleware wraps the whole invocation; framework middleware sits inside the Deep Agent loop for email.
-
-Compliance is not something you “prompt in”; it belongs in the harness.
-
-### Context management
-
-Garbage in, garbage out on context. This project uses `before_model_call` to keep history inside budget:
-
-- [`SummarizationMiddleware`](../src/app/core/middleware/summarization_middleware.py) calls `summarize_if_too_long` from `src/app/core/context/` so long history is compressed before the model runs.
-- [`TrimLongMessagesMiddleware`](../src/app/core/middleware/trim_long_messages_middleware.py) uses LangChain `trim_messages` with a “last” strategy so recent messages survive when the list is too long.
-
-The chatbot registers both in `AgentChatbot` together with memory and logging (`src/app/agents/chatbot/agent_chatbot.py`).
-
-- [`MemoryMiddleware`](../src/app/core/middleware/memory_middleware.py): `before_invoke` runs `get_relevant_memory` and sets `ctx.metadata["long_term_memory"]`; `after_invoke` runs `bg_update_memory` from returned messages. Retrieval and write-back stay out of routing logic in the graph.
-
-### Dynamic control (tools, model, prompt)
-
-“Swap tools at runtime” or “pick a subset per turn” here is mostly graph structure and tool loading (MCP tools in the chatbot, for example), not a dedicated selector middleware class. You extend by adding an `AgentMiddleware` or by adding nodes and edges. Middleware stays thin for cross-cutting rules; routing stays in the graph where you can see it.
-
-### Production behavior
-
-Things demos skip but ops care about:
-
-- [`ErrorHandlingMiddleware`](../src/app/core/middleware/error_handling_middleware.py): `on_error`, LLM error metrics, and in non-dev environments an empty result instead of leaking stack traces to the client.
-- [`LoggingMiddleware`](../src/app/core/middleware/logging_middleware.py): invoke start/end; at debug, model and tool boundaries with `structlog` and fields like `agent_name`, `session_id`.
-- LLM calls often go through `model_invoke_with_metrics` in `src/app/core/metrics/`; the chatbot wraps the model with `.with_retry()` for flaky APIs. Same operational story as middleware, but some of that lives at the call site as well as in `on_error`.
-
-### Environment around the loop
-
-Other writeups describe middleware that spins up a shell for the run. Here the close cousin is MCP: sessions and tools are set up outside the core loop, then used from graph nodes. See `_load_mcp_tools` and `handle_mcp_tool_call` in `src/app/agents/chatbot/agent_chatbot.py` and `src/app/core/mcp/`. That is not implemented as `before_invoke` / `after_invoke` middleware in this tree, but it answers the same need: stable resources the agent can reuse across turns.
+Isso dá um único lugar para logging, política de erro e memória sem duplicar lógica entre agentes.
 
 ---
 
-## Deep Agents plus an outer pipeline
+## Exemplos Deste Repositório
 
-Deep Agents (via `deepagents`) ship a full loop with strong defaults. In `TextSQLDeepAgent`, `create_sql_deep_agent()` passes `create_deep_agent` a model, SQL tools, filesystem backend, skills, and LangChain `PIIMiddleware` on the inner agent. `TextSQLDeepAgent` then wraps `agent.ainvoke` in `AgentPipeline` with `LoggingMiddleware`, `ErrorHandlingMiddleware`, and `GuardrailMiddleware`.
+Abaixo está como a árvore é realmente usada, não um walkthrough de terceiros.
 
-You end up with two layers: harness policies on every `agent_invoke`, and framework middleware inside the deep agent. The custom chatbot path uses an explicit LangGraph and wires per-step model and tool hooks to `MiddlewareManager`, which is more control and more node code.
+### Lógica de Negócio e Compliance
+
+Algumas regras não devem viver apenas em prompt. Política de conteúdo e tratamento de PII são determinísticos e devem rodar em toda request.
+
+- [`GuardrailMiddleware`](../src/app/core/middleware/guardrail_middleware.py): `before_invoke` (content filter, bloqueio de alguns tipos de PII na entrada), `after_invoke` (redação de PII na saída do assistente, safety check assíncrono opcional). Ele pode retornar cedo em `before_invoke`, então o modelo nunca roda em input proibido.
+- O agente text-to-SQL usa o mesmo pipeline externo para logging, erros e guardrails, e passa `PIIMiddleware("email")` do LangChain para `create_deep_agent` em `src/app/agents/text_to_sql/text_sql_agent.py`. Middleware em nível de harness envolve a invocação inteira; middleware do framework fica dentro do loop do Deep Agent para email.
+
+Compliance não é algo para "colocar no prompt"; pertence ao harness.
+
+### Gerenciamento de Contexto
+
+Contexto ruim entra, resposta ruim sai. Este projeto usa `before_model_call` para manter o histórico dentro do orçamento:
+
+- [`SummarizationMiddleware`](../src/app/core/middleware/summarization_middleware.py) chama `summarize_if_too_long` de `src/app/core/context/` para comprimir histórico longo antes do modelo rodar.
+- [`TrimLongMessagesMiddleware`](../src/app/core/middleware/trim_long_messages_middleware.py) usa `trim_messages` do LangChain com estratégia `"last"`, preservando mensagens recentes quando a lista está longa demais.
+
+O chatbot registra ambos em `AgentChatbot`, junto com memória e logging (`src/app/agents/chatbot/agent_chatbot.py`).
+
+- [`MemoryMiddleware`](../src/app/core/middleware/memory_middleware.py): `before_invoke` roda `get_relevant_memory` e define `ctx.metadata["long_term_memory"]`; `after_invoke` roda `bg_update_memory` a partir das mensagens retornadas. Recuperação e escrita de memória ficam fora da lógica de roteamento do grafo.
+
+### Controle Dinâmico (tools, modelo, prompt)
+
+"Trocar ferramentas em runtime" ou "escolher um subconjunto por turno" aqui é principalmente estrutura do grafo e carregamento de tools (ferramentas MCP no chatbot, por exemplo), não uma classe dedicada de middleware seletor. Você estende adicionando um `AgentMiddleware` ou adicionando nós e arestas. Middleware fica enxuto para regras transversais; roteamento fica no grafo, onde é visível.
+
+### Comportamento de Produção
+
+Coisas que demos pulam, mas operação cobra:
+
+- [`ErrorHandlingMiddleware`](../src/app/core/middleware/error_handling_middleware.py): `on_error`, métricas de erro de LLM e, em ambientes não-dev, resultado vazio em vez de vazar stack traces para o cliente.
+- [`LoggingMiddleware`](../src/app/core/middleware/logging_middleware.py): início/fim de invocação; em debug, fronteiras de modelo e ferramenta com `structlog` e campos como `agent_name`, `session_id`.
+- Chamadas de LLM frequentemente passam por `model_invoke_with_metrics` em `src/app/core/metrics/`; o chatbot envolve o modelo com `.with_retry()` para APIs instáveis. A mesma história operacional do middleware, mas parte dela vive no call site e também em `on_error`.
+
+### Ambiente ao Redor do Loop
+
+Outros textos descrevem middleware que sobe um shell para a execução. Aqui, o primo próximo é MCP: sessões e ferramentas são configuradas fora do loop central e depois usadas pelos nós do grafo. Veja `_load_mcp_tools` e `handle_mcp_tool_call` em `src/app/agents/chatbot/agent_chatbot.py` e `src/app/core/mcp/`. Isso não é implementado como middleware `before_invoke` / `after_invoke` nesta árvore, mas atende à mesma necessidade: recursos estáveis que o agente pode reutilizar entre turnos.
 
 ---
 
-## Why keep this abstraction?
+## Deep Agents Mais um Pipeline Externo
 
-Models will keep improving; some of today’s context trimming may move closer to the model over time. What does not live in weights is policy: what the org allows, what you log, how you fail, and how you reuse those rules across agents. Middleware splits those concerns into small classes with a defined order and keeps prompts, tools, and graph code from turning into an infrastructure dump.
+Deep Agents (via `deepagents`) trazem um loop completo com bons defaults. Em `TextSQLDeepAgent`, `create_sql_deep_agent()` passa para `create_deep_agent` um modelo, tools SQL, backend de filesystem, skills e `PIIMiddleware` do LangChain no agente interno. `TextSQLDeepAgent` então envolve `agent.ainvoke` em `AgentPipeline` com `LoggingMiddleware`, `ErrorHandlingMiddleware` e `GuardrailMiddleware`.
 
-Shared behavior lives under `src/app/core/middleware/`; agents under `src/app/agents/` pick their stack when they build `AgentPipeline`. Start from `src/app/core/middleware/__init__.py` for exports and [`pipeline.py`](../src/app/core/middleware/pipeline.py) for execution order, then read the chatbot and text-to-SQL agents for the two integration styles.
+Você termina com duas camadas: políticas do harness em todo `agent_invoke` e middleware do framework dentro do deep agent. O caminho customizado do chatbot usa um LangGraph explícito e conecta hooks por etapa de modelo e ferramenta ao `MiddlewareManager`, o que dá mais controle e mais código de nó.
 
 ---
 
-## Further reading
+## Por Que Manter Esta Abstração?
 
-- [Building a production-ready AI agent harness](./ARTICLE.md): HTTP middleware, auth, memory, observability, and the rest.
-- Types and runner: [`src/app/core/middleware/types.py`](../src/app/core/middleware/types.py), [`src/app/core/middleware/pipeline.py`](../src/app/core/middleware/pipeline.py)
-- Reference wiring: [`src/app/agents/chatbot/agent_chatbot.py`](../src/app/agents/chatbot/agent_chatbot.py), [`src/app/agents/text_to_sql/text_sql_agent.py`](../src/app/agents/text_to_sql/text_sql_agent.py)
+Modelos continuarão melhorando; parte do trimming de contexto de hoje pode se aproximar do modelo com o tempo. O que não vive nos pesos é política: o que a organização permite, o que você loga, como falha e como reutiliza essas regras entre agentes. Middleware separa essas preocupações em classes pequenas com ordem definida e evita que prompts, ferramentas e código de grafo virem um despejo de infraestrutura.
+
+Comportamento compartilhado vive em `src/app/core/middleware/`; agentes em `src/app/agents/` escolhem sua stack quando constroem `AgentPipeline`. Comece por `src/app/core/middleware/__init__.py` para exports e [`pipeline.py`](../src/app/core/middleware/pipeline.py) para a ordem de execução; depois leia os agentes chatbot e text-to-SQL para ver os dois estilos de integração.
+
+---
+
+## Leitura Complementar
+
+- [Construindo um agent harness de IA pronto para produção](./ARTICLE.md): middleware HTTP, auth, memória, observabilidade e o restante.
+- Tipos e runner: [`src/app/core/middleware/types.py`](../src/app/core/middleware/types.py), [`src/app/core/middleware/pipeline.py`](../src/app/core/middleware/pipeline.py)
+- Wiring de referência: [`src/app/agents/chatbot/agent_chatbot.py`](../src/app/agents/chatbot/agent_chatbot.py), [`src/app/agents/text_to_sql/text_sql_agent.py`](../src/app/agents/text_to_sql/text_sql_agent.py)

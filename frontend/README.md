@@ -1,62 +1,55 @@
-# Agent Harness — Frontend (React + Vite + TS + Tailwind)
+# Agent Harness: Frontend (React + Vite + TS + Tailwind)
 
-A minimal but real chat UI for the harness's `chatbot` agent: register/login, automatic
-session creation, and a streaming chat with server-kept history.
+Uma UI de chat mínima, mas real, para o agente `chatbot` do harness: cadastro/login, criação automática de sessão e chat em streaming com histórico mantido no servidor.
 
-## Prerequisites
+## Pré-requisitos
 
-- Node 18+ (tested on Node 24)
-- The **backend running** on `http://localhost:8000` (`.\dev.ps1` in the repo root)
+- Node 18+ (testado no Node 24)
+- **Backend rodando** em `http://localhost:8000` (`.\dev.ps1` na raiz do repositório)
 
-## Run
+## Rodar
 
 ```bash
 cd frontend
-npm install        # first time only
-npm run dev        # serves on http://localhost:5173
+npm install        # apenas na primeira vez
+npm run dev        # serve em http://localhost:5173
 ```
 
-Open **http://localhost:5173**. The Vite dev server proxies every `/api/*` call to the
-backend on `:8000` (see `vite.config.ts`), so there are no CORS issues and no tokens in URLs.
+Abra **http://localhost:5173**. O dev server do Vite faz proxy de toda chamada `/api/*` para o backend em `:8000` (veja `vite.config.ts`), então não há problemas de CORS nem tokens em URLs.
 
-> Port note: the UI runs on **5173** (Vite default) because port 3000 is often taken by other
-> local apps. Change `server.port` in `vite.config.ts` if needed.
+> Nota de porta: a UI roda na **5173** (padrão do Vite) porque a porta 3000 costuma estar ocupada por outros apps locais. Altere `server.port` em `vite.config.ts` se necessário.
 
-## How it works
+## Como Funciona
 
-- **Two tokens.** Register/login returns a *user token*; the app immediately calls
-  `POST /auth/session` to get a *session token*. The chat endpoints require the session token.
-  Both are kept in `localStorage` (`agent_harness_auth`).
-- **Streaming.** `POST /chatbot/chat/stream` returns Server-Sent Events; `src/lib/api.ts`
-  parses them with a `fetch` + `ReadableStream` reader and yields tokens as they arrive.
-- **History lives on the server.** LangGraph checkpoints each session, so the UI sends only the
-  new user message per turn and loads prior turns via `GET /chatbot/messages`.
+- **Dois tokens.** Cadastro/login retorna um *token de usuário*; o app chama imediatamente `POST /auth/session` para obter um *token de sessão*. Os endpoints de chat exigem o token de sessão. Ambos ficam em `localStorage` (`agent_harness_auth`).
+- **Streaming.** `POST /chatbot/chat/stream` retorna Server-Sent Events; `src/lib/api.ts` faz o parsing com `fetch` + leitor `ReadableStream` e entrega tokens conforme chegam.
+- **Histórico vive no servidor.** O LangGraph faz checkpoints por sessão, então a UI envia apenas a nova mensagem do usuário a cada turno e carrega turnos anteriores via `GET /chatbot/messages`.
 
-## Structure
+## Estrutura
 
-```
+```text
 src/
-  main.tsx              # entry, wraps <App> in <AuthProvider>
-  App.tsx               # routes between LoginScreen and ChatScreen
-  context/AuthContext.tsx  # tokens, register/login/logout, session creation
-  lib/api.ts            # typed API client + SSE streaming
-  lib/types.ts          # TS types mirroring the backend DTOs
+  main.tsx              # entrypoint, envolve <App> em <AuthProvider>
+  App.tsx               # alterna entre LoginScreen e ChatScreen
+  context/AuthContext.tsx  # tokens, register/login/logout, criação de sessão
+  lib/api.ts            # cliente de API tipado + streaming SSE
+  lib/types.ts          # tipos TS espelhando os DTOs do backend
   components/
-    LoginScreen.tsx     # register / login form
-    ChatScreen.tsx      # message list + send + clear + new session
-    MessageBubble.tsx   # one message (typing indicator while streaming)
-    Composer.tsx        # input box (Enter to send, Shift+Enter newline)
+    LoginScreen.tsx     # formulário de cadastro / login
+    ChatScreen.tsx      # lista de mensagens + enviar + limpar + nova sessão
+    MessageBubble.tsx   # uma mensagem (indicador digitando durante streaming)
+    Composer.tsx        # caixa de input (Enter envia, Shift+Enter quebra linha)
 ```
 
 ## Build
 
 ```bash
-npm run build     # type-checks (tsc -b) and bundles to dist/
-npm run preview   # serve the production build locally
+npm run build     # type-check (tsc -b) e bundle para dist/
+npm run preview   # serve o build de produção localmente
 ```
 
-## Next ideas
+## Próximas Ideias
 
-- Session sidebar (list via `GET /auth/sessions`, switch/rename/delete).
-- Tabs for the other agents (`/text-to-sql`, `/deep-research`).
-- Token-expiry handling + refresh, and markdown rendering of assistant replies.
+- Sidebar de sessões (listar via `GET /auth/sessions`, alternar/renomear/excluir).
+- Abas para os outros agentes (`/text-to-sql`, `/deep-research`).
+- Tratamento de expiração de token + refresh e renderização markdown das respostas do assistente.

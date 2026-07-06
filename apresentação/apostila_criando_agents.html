@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apostila Criando Agents</title>
+  <style>
+    :root {
+      --paper: #fbfaf7;
+      --sheet: #ffffff;
+      --ink: #172033;
+      --muted: #647087;
+      --line: #d9deea;
+      --soft: #f2f5f9;
+      --blue: #2563eb;
+      --green: #0f766e;
+      --amber: #b45309;
+      --red: #b91c1c;
+      --code: #0f172a;
+      --shadow: 0 24px 70px rgba(35, 45, 70, .12);
+      --body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, .045) 1px, transparent 1px),
+        linear-gradient(rgba(37, 99, 235, .035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+      color: var(--ink);
+      font-family: var(--body);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow-y: auto;
+      padding: clamp(28px, 4vw, 58px);
+    }
+
+    .slide.active {
+      display: block;
+    }
+
+    .page {
+      min-height: calc(100vh - clamp(56px, 8vw, 116px));
+      max-width: 1160px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, .94);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: clamp(28px, 4.4vw, 64px);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .cover .page {
+      justify-content: center;
+    }
+
+    .kicker {
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 930px;
+      font-size: clamp(42px, 7vw, 92px);
+      line-height: .94;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      max-width: 940px;
+      font-size: clamp(30px, 4.8vw, 66px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .lead {
+      max-width: 840px;
+      color: #354159;
+      font-size: clamp(18px, 2.1vw, 25px);
+      line-height: 1.45;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: var(--sheet);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .card.soft {
+      background: var(--soft);
+    }
+
+    .card h3 {
+      margin-bottom: 10px;
+    }
+
+    .card p,
+    li {
+      color: #3e4a61;
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 7px;
+    }
+
+    code,
+    pre {
+      font-family: var(--mono);
+    }
+
+    code {
+      color: var(--code);
+      background: #eef2ff;
+      border: 1px solid #dbe4ff;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: .92em;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 0;
+      color: #dbeafe;
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .path {
+      font-family: var(--mono);
+      color: #1e3a8a;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 4px 7px;
+      white-space: nowrap;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 118px;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--blue);
+    }
+
+    .tagrow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .note {
+      border-left: 4px solid var(--blue);
+      background: #eff6ff;
+      padding: 14px 16px;
+      color: #1e3a8a;
+      line-height: 1.45;
+    }
+
+    .warn {
+      border-left-color: var(--amber);
+      background: #fffbeb;
+      color: #7c2d12;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      display: table;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    th {
+      color: #111827;
+      background: #f8fafc;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .progress {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 5px;
+      background: #dbe4f0;
+      z-index: 5;
+    }
+
+    .bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--green));
+      transition: width .2s ease;
+    }
+
+    .nav {
+      position: fixed;
+      right: 20px;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 6;
+      color: #334155;
+      font-size: 13px;
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .12);
+    }
+
+    .nav button {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: #172033;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .nav button:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .toc {
+      columns: 2;
+      column-gap: 28px;
+    }
+
+    .toc li {
+      break-inside: avoid;
+      margin-bottom: 9px;
+    }
+
+    .mini {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .accent {
+      color: var(--blue);
+    }
+
+    .ok {
+      color: var(--green);
+    }
+
+    .danger {
+      color: var(--red);
+    }
+
+    @media (max-width: 860px) {
+      body {
+        overflow: auto;
+      }
+
+      .slide {
+        position: relative;
+        min-height: 100vh;
+        padding: 16px 16px 74px;
+      }
+
+      .page {
+        min-height: calc(100vh - 90px);
+      }
+
+      .grid.two,
+      .grid.three,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .toc {
+        columns: 1;
+      }
+
+      .nav {
+        left: 12px;
+        right: 12px;
+        justify-content: center;
+      }
+    }
+
+    @media print {
+      body {
+        overflow: visible;
+        background: #fff;
+      }
+
+      .slide {
+        display: block !important;
+        position: relative;
+        min-height: 100vh;
+        page-break-after: always;
+      }
+
+      .nav,
+      .progress {
+        display: none;
+      }
+
+      .page {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="deck" aria-live="polite">
+    <section class="slide cover active" data-title="Capa">
+      <div class="page">
+        <div class="kicker">Apostila de estudo</div>
+        <h1>Criando agents com este projeto</h1>
+        <p class="lead">Um roteiro prático para entender o harness, os arquivos, os termos e o caminho para criar novos agentes em LangGraph, Deep Agents e FastAPI.</p>
+        <div class="tagrow">
+          <span class="tag">HTML navegável</span>
+          <span class="tag">Fundo branco</span>
+          <span class="tag">Baseado no código real</span>
+          <span class="tag">Estudo passo a passo</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Como usar">
+      <div class="page">
+        <div class="kicker">Leitura recomendada</div>
+        <h2>Use esta apostila como mapa, não como decoração.</h2>
+        <div class="grid three">
+          <div class="card">
+            <h3>1. Leia o conceito</h3>
+            <p>Entenda o que é um harness: a infraestrutura que envolve o modelo para ele virar produto utilizável.</p>
+          </div>
+          <div class="card">
+            <h3>2. Abra os arquivos</h3>
+            <p>Cada página aponta para pastas reais. O estudo ganha força quando você alterna entre esta apostila e o código.</p>
+          </div>
+          <div class="card">
+            <h3>3. Crie um agente pequeno</h3>
+            <p>No fim, siga o roteiro e implemente um agente mínimo antes de tentar algo grande.</p>
+          </div>
+        </div>
+        <p class="note">Navegue com as setas do teclado, espaço, PageUp/PageDown ou pelos botões no canto inferior.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Sumário">
+      <div class="page">
+        <div class="kicker">Sumário</div>
+        <h2>O caminho de estudo</h2>
+        <ol class="toc">
+          <li>O que este projeto faz</li>
+          <li>Mapa mental do harness</li>
+          <li>Vocabulário essencial</li>
+          <li>Parâmetros e configuração</li>
+          <li>Arquivos `.md` e documentação viva</li>
+          <li>AGENTS, CODEX, CONTEXT e ADR</li>
+          <li>Skills e comandos `.codex`</li>
+          <li>Os agentes incluídos</li>
+          <li>LangGraph por dentro</li>
+          <li>Deep Agents por dentro</li>
+          <li>FastAPI, rotas e DTOs</li>
+          <li>Memória, checkpoints e guardrails</li>
+          <li>Scripts, Docker, frontend e observabilidade</li>
+          <li>Roteiro para criar seu primeiro agent</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="slide" data-title="O projeto">
+      <div class="page">
+        <div class="kicker">Visão geral</div>
+        <h2>Este repositório é uma fábrica de agents.</h2>
+        <p class="lead">Você não começa do zero. O projeto já entrega login, sessões, API, memória, estado, observabilidade, guardrails, frontend e exemplos de agentes.</p>
+        <div class="grid two">
+          <div class="card soft">
+            <h3>O que você troca</h3>
+            <ul>
+              <li>O domínio do agente.</li>
+              <li>O prompt em `system.md`.</li>
+              <li>As tools que ele pode usar.</li>
+              <li>A rota e os DTOs específicos.</li>
+            </ul>
+          </div>
+          <div class="card soft">
+            <h3>O que o harness mantém</h3>
+            <ul>
+              <li>Autenticação JWT e sessões.</li>
+              <li>Rate limit por endpoint.</li>
+              <li>Memória longa com mem0 + pgvector.</li>
+              <li>Checkpoints LangGraph em Postgres.</li>
+              <li>Métricas, logs e tracing.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Mapa mental">
+      <div class="page">
+        <div class="kicker">Mapa mental</div>
+        <h2>O modelo é só uma peça. O agent é o sistema ao redor.</h2>
+        <div class="flow">
+          <div class="step"><strong>Frontend</strong><span>Login, chat, painel de fontes e streaming.</span></div>
+          <div class="step"><strong>FastAPI</strong><span>Rotas, DTOs, autenticação, rate limit e SSE.</span></div>
+          <div class="step"><strong>Agent</strong><span>LangGraph ou Deep Agents com prompt, tools e estado.</span></div>
+          <div class="step"><strong>Core</strong><span>Memória, checkpoint, guardrails, middleware, métricas.</span></div>
+          <div class="step"><strong>Dados</strong><span>Postgres, pgvector, banco externo, pasta sandbox, MCP.</span></div>
+        </div>
+        <pre><code>Usuário -> frontend -> /api/v1/... -> agent.agent_invoke()
+       -> LLM + tools + memória + checkpoint
+       -> resposta normal ou stream -> frontend</code></pre>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Vocabulário">
+      <div class="page">
+        <div class="kicker">Vocabulário essencial</div>
+        <h2>Termos que aparecem o tempo todo</h2>
+        <table>
+          <tr><th>Termo</th><th>Significado neste projeto</th></tr>
+          <tr><td><code>Agent</code></td><td>Uma unidade que recebe mensagens, usa LLM, tools, memória e regras para executar uma tarefa.</td></tr>
+          <tr><td><code>Harness</code></td><td>A camada reutilizável que dá estrutura ao agent: API, auth, memória, guardrails, métricas e deploy.</td></tr>
+          <tr><td><code>Tool</code></td><td>Função que o agent pode chamar: pesquisar, executar SQL, listar arquivos, consultar memória.</td></tr>
+          <tr><td><code>State</code></td><td>Estado compartilhado entre nós de um grafo LangGraph, como mensagens e memória carregada.</td></tr>
+          <tr><td><code>Checkpoint</code></td><td>Persistência do estado por sessão/thread para continuar conversas e sobreviver a falhas.</td></tr>
+          <tr><td><code>Skill</code></td><td>Instrução carregada sob demanda para ensinar um fluxo especializado ao agent.</td></tr>
+          <tr><td><code>ADR</code></td><td>Registro de uma decisão arquitetural importante: contexto, escolha, impacto e alternativas.</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Parâmetros">
+      <div class="page">
+        <div class="kicker">Parâmetros e configuração</div>
+        <h2>Parâmetros são decisões que vêm do ambiente, não do código espalhado.</h2>
+        <p class="lead">A fonte central é <span class="path">src/app/core/common/config.py</span>. Ele lê `.env`, define defaults e expõe `settings` para o resto do app.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>Arquivos de ambiente</h3>
+            <ul>
+              <li><code>.env.example</code>: modelo seguro para copiar.</li>
+              <li><code>.env.development</code>: desenvolvimento local.</li>
+              <li><code>.env.staging</code>: homologação.</li>
+              <li><code>.env.production</code>: produção.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Parâmetros importantes</h3>
+            <ul>
+              <li><code>OPENAI_API_KEY</code>, <code>DEFAULT_LLM_MODEL</code>, <code>MAX_TOKENS</code>.</li>
+              <li><code>JWT_SECRET_KEY</code> e expiração do token.</li>
+              <li><code>POSTGRES_*</code> para banco e pgvector.</li>
+              <li><code>RATE_LIMIT_ENDPOINTS</code> para limitar rotas.</li>
+              <li><code>MCP_ENABLED</code> e <code>MCP_HOSTNAMES_CSV</code>.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note warn">Nunca coloque segredo direto no código. A apostila chama de parâmetro tudo que deve mudar por ambiente sem editar a lógica do agent.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Arquivos md">
+      <div class="page">
+        <div class="kicker">Arquivos .md</div>
+        <h2>Os `.md` são parte do sistema de trabalho.</h2>
+        <table>
+          <tr><th>Arquivo</th><th>Função</th></tr>
+          <tr><td><code>README.md</code></td><td>Explica o projeto para humanos: arquitetura, setup, capacidades e API.</td></tr>
+          <tr><td><code>CODEX.md</code></td><td>Guia operacional para o Codex neste repo: regras, comandos, padrões e como criar agents.</td></tr>
+          <tr><td><code>AGENTS.md</code></td><td>Guia genérico compatível com ferramentas de agentes. Traz regras críticas e fluxo de plano.</td></tr>
+          <tr><td><code>CONTEXT.md</code></td><td>Documento vivo para descobrir o produto antes de codar. Hoje está em levantamento.</td></tr>
+          <tr><td><code>system.md</code></td><td>Prompt de sistema de cada agent. Define papel, limites e contexto injetado.</td></tr>
+          <tr><td><code>SKILL.md</code></td><td>Entrada de uma skill. Tem frontmatter e instruções carregadas sob demanda.</td></tr>
+          <tr><td><code>docs/*.md</code></td><td>Relatórios, perguntas de descoberta, estrutura do projeto e estudos de arquitetura.</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide" data-title="AGENTS CODEX CONTEXT">
+      <div class="page">
+        <div class="kicker">Documentos de orientação</div>
+        <h2>Três arquivos dizem como pensar antes de alterar código.</h2>
+        <div class="grid three">
+          <div class="card">
+            <h3>AGENTS.md</h3>
+            <p>Regras críticas para qualquer agente que mexa no projeto: imports no topo, structlog, rate limit, plano antes de código e checkboxes.</p>
+          </div>
+          <div class="card">
+            <h3>CODEX.md</h3>
+            <p>Manual prático do repo para o Codex: mapa, comandos, criação de agentes, padrões e armadilhas.</p>
+          </div>
+          <div class="card">
+            <h3>CONTEXT.md</h3>
+            <p>Espaço para transformar uma ideia vaga em produto: usuário, problema, dados, guardrails, regras e decisões.</p>
+          </div>
+        </div>
+        <p class="note">Ao criar um agent novo, não comece pelo LLM. Comece preenchendo contexto, objetivo, fontes de dados e limites.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="ADR">
+      <div class="page">
+        <div class="kicker">ADR</div>
+        <h2>ADR é memória arquitetural.</h2>
+        <p class="lead">ADR significa Architecture Decision Record. É um registro curto para decisões difíceis de reverter, como banco, provedor de LLM, estratégia de memória, isolamento de tenants ou abordagem de sandbox.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>Quando criar</h3>
+            <ul>
+              <li>Quando a decisão muda arquitetura.</li>
+              <li>Quando existem alternativas reais.</li>
+              <li>Quando alguém no futuro perguntaria "por que fizemos assim?".</li>
+              <li>Quando o custo de voltar atrás é alto.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Modelo simples</h3>
+            <pre><code># ADR-001: Usar pgvector para memória
+
+## Contexto
+Precisamos de busca semântica por usuário.
+
+## Decisão
+Usar PostgreSQL + pgvector via mem0.
+
+## Consequências
+Menos serviços externos, mas Postgres vira peça crítica.
+
+## Alternativas
+Chroma, Pinecone, Supabase Vector.</code></pre>
+          </div>
+        </div>
+        <p class="note">O projeto cita `docs/adr/` como destino para ADRs, mas a pasta ainda pode ser criada quando a primeira decisão importante aparecer.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Skills">
+      <div class="page">
+        <div class="kicker">Skills</div>
+        <h2>Skill é conhecimento especializado carregado na hora certa.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>No `.codex/skills`</h3>
+            <p>São skills para o Codex trabalhar melhor: LangGraph, Deep Agents, RAG, middleware, persistência, dependências e execução paralela.</p>
+          </div>
+          <div class="card">
+            <h3>No `text_to_sql/skills`</h3>
+            <p>São skills do próprio agent de SQL: uma para explorar schema e outra para escrever queries.</p>
+          </div>
+        </div>
+        <pre><code>skills/
+  query-writing/
+    SKILL.md
+  schema-exploration/
+    SKILL.md</code></pre>
+        <p class="note">A diferença central: `AGENTS.md` é instrução geral sempre presente; `SKILL.md` é instrução específica que só deve entrar quando a tarefa pede.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Commands">
+      <div class="page">
+        <div class="kicker">.codex/commands</div>
+        <h2>Commands são receitas reutilizáveis.</h2>
+        <table>
+          <tr><th>Comando</th><th>O que ensina ou automatiza</th></tr>
+          <tr><td><code>new-agent.md</code></td><td>Como criar scaffold de agent: pasta, rota, DTO, rate limit e registro no router.</td></tr>
+          <tr><td><code>plan.md</code></td><td>Como criar plano com checkboxes antes de tarefas maiores.</td></tr>
+          <tr><td><code>run.md</code></td><td>Como subir banco + API e validar `/health`.</td></tr>
+          <tr><td><code>db.md</code></td><td>Como subir, parar, resetar e inspecionar Postgres local.</td></tr>
+          <tr><td><code>frontend.md</code></td><td>Como trabalhar no React/Vite, build e fluxo de telas.</td></tr>
+        </table>
+        <p class="note">Commands não são código de produção. São playbooks para repetir tarefas sem reinventar o processo.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Agents incluídos">
+      <div class="page">
+        <div class="kicker">src/app/agents</div>
+        <h2>O projeto vem com quatro referências de agent.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>chatbot</h3>
+            <p>Referência LangGraph explícita: nós, tools, guardrails, memória, streaming e checkpoint.</p>
+          </div>
+          <div class="card">
+            <h3>data_agent</h3>
+            <p>Deep Agent por sessão para consultar banco read-only, pasta em sandbox e memória do usuário.</p>
+          </div>
+          <div class="card">
+            <h3>text_to_sql</h3>
+            <p>Deep Agent de demonstração com SQLite Chinook, tools SQL e skills de schema/query.</p>
+          </div>
+          <div class="card">
+            <h3>open_deep_research</h3>
+            <p>Fluxo de pesquisa com supervisor, researcher subgraph, clarificação e relatório final.</p>
+          </div>
+        </div>
+        <p class="note">Para estudar primeiro: leia `chatbot` se quiser entender LangGraph; leia `data_agent` se quiser entender um caso mais parecido com produto.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="LangGraph">
+      <div class="page">
+        <div class="kicker">LangGraph</div>
+        <h2>LangGraph transforma o agent em um grafo de execução.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>No `chatbot`</h3>
+            <ul>
+              <li><code>StateGraph(GraphState)</code> cria o grafo.</li>
+              <li><code>input_guardrail</code> valida a entrada.</li>
+              <li><code>chat</code> chama o modelo.</li>
+              <li><code>tool_call</code> executa ferramentas.</li>
+              <li><code>output_guardrail</code> valida a saída.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Termos-chave</h3>
+            <ul>
+              <li><code>Node</code>: função que faz trabalho.</li>
+              <li><code>Edge</code>: caminho entre nós.</li>
+              <li><code>Command</code>: atualiza estado e decide próximo nó.</li>
+              <li><code>END</code>: finaliza execução.</li>
+              <li><code>compile()</code>: torna o grafo executável.</li>
+            </ul>
+          </div>
+        </div>
+        <pre><code>input_guardrail -> chat -> tool_call -> chat -> output_guardrail -> END</code></pre>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Deep Agents">
+      <div class="page">
+        <div class="kicker">Deep Agents</div>
+        <h2>Deep Agents é uma camada mais pronta para tarefas longas.</h2>
+        <p class="lead">Enquanto LangGraph te dá controle fino do grafo, Deep Agents entrega planejamento, filesystem, skills, subagents e memória com menos código de orquestração.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>Quando usar</h3>
+            <ul>
+              <li>Tarefas multi-etapas.</li>
+              <li>Consulta a arquivos e ferramentas.</li>
+              <li>Especialização por skills.</li>
+              <li>Possível delegação a subagents.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>No projeto</h3>
+            <ul>
+              <li><code>text_to_sql</code> usa <code>create_deep_agent()</code>.</li>
+              <li><code>data_agent</code> monta tools conforme fontes conectadas.</li>
+              <li>Skills aparecem em <code>text_to_sql/skills</code>.</li>
+              <li>Backend de filesystem pode ser sandboxado.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="FastAPI">
+      <div class="page">
+        <div class="kicker">FastAPI e rotas</div>
+        <h2>O agent vira produto quando ganha endpoint.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Rota</h3>
+            <p>Arquivos em <span class="path">src/app/api/v1/</span> recebem requests, validam sessão, aplicam rate limit e chamam o agent.</p>
+          </div>
+          <div class="card">
+            <h3>DTO</h3>
+            <p>Arquivos em <span class="path">src/app/api/v1/dtos/</span> definem modelos Pydantic para entrada e saída.</p>
+          </div>
+        </div>
+        <pre><code>@router.post("/query", response_model=DataQueryResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["data_agent"][0])
+async def query_sources(
+    request: Request,
+    body: DataQueryRequest,
+    session: Session = Depends(get_current_session),
+) -> DataQueryResponse:
+    ...</code></pre>
+        <p class="note">Regra do projeto: toda rota precisa de rate limit, type hints e modelos Pydantic adequados.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Memória e estado">
+      <div class="page">
+        <div class="kicker">Memória e checkpoints</div>
+        <h2>O agent precisa lembrar em dois níveis.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Checkpoint</h3>
+            <p>Estado da conversa por sessão/thread, via <code>AsyncPostgresSaver</code>. Serve para continuar o grafo e recuperar histórico.</p>
+          </div>
+          <div class="card">
+            <h3>Memória longa</h3>
+            <p>Fatos úteis sobre o usuário, via <code>mem0</code> + <code>pgvector</code>. É buscada por similaridade e atualizada em background.</p>
+          </div>
+        </div>
+        <pre><code>checkpoint: "o que aconteceu nesta thread?"
+memória longa: "o que vale lembrar deste usuário?"</code></pre>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Guardrails e middleware">
+      <div class="page">
+        <div class="kicker">Guardrails e middleware</div>
+        <h2>Nem tudo deve chegar ao modelo. Nem tudo que sai deve ir ao usuário.</h2>
+        <table>
+          <tr><th>Camada</th><th>Papel</th></tr>
+          <tr><td><code>guardrails/</code></td><td>Filtro de conteúdo, PII, safety check e nós de entrada/saída para grafos.</td></tr>
+          <tr><td><code>middleware/</code></td><td>Pipeline em volta do agent: logging, erros, memória, sumarização, trimming e guardrails.</td></tr>
+          <tr><td><code>context/</code></td><td>Ajuda a reduzir contexto, truncar chamadas de tools e resumir mensagens longas.</td></tr>
+          <tr><td><code>logging.py</code></td><td>Padroniza logs estruturados com structlog.</td></tr>
+        </table>
+        <p class="note warn">Guardrail não é censura genérica. É contrato de segurança: privacidade, escopo, formato e ações permitidas.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Data Agent">
+      <div class="page">
+        <div class="kicker">Data Agent</div>
+        <h2>O Data Agent é o caminho mais prático para estudar um produto real.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>O que ele faz</h3>
+            <ul>
+              <li>Conecta um banco por sessão.</li>
+              <li>Mantém credenciais só em memória.</li>
+              <li>Expõe SQL read-only ao agent.</li>
+              <li>Pode autorizar uma pasta em sandbox Docker.</li>
+              <li>Faz stream de tool calls e tokens ao frontend.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Arquivos principais</h3>
+            <ul>
+              <li><code>api/v1/data_agent.py</code>: endpoints.</li>
+              <li><code>agents/data_agent/agent_data.py</code>: agent.</li>
+              <li><code>core/db/readonly.py</code>: proteção SQL.</li>
+              <li><code>core/sandbox/registry.py</code>: fontes por sessão.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Text-to-SQL">
+      <div class="page">
+        <div class="kicker">Text-to-SQL</div>
+        <h2>O agente de SQL mostra como skills guiam raciocínio especializado.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Fluxo</h3>
+            <ol>
+              <li>Recebe pergunta em linguagem natural.</li>
+              <li>Explora tabelas e schema.</li>
+              <li>Planeja a query.</li>
+              <li>Executa SQL read-only.</li>
+              <li>Explica o resultado.</li>
+            </ol>
+          </div>
+          <div class="card">
+            <h3>Peças didáticas</h3>
+            <ul>
+              <li><code>AGENTS.md</code>: identidade do agent.</li>
+              <li><code>skills/schema-exploration/SKILL.md</code>: descobrir estrutura.</li>
+              <li><code>skills/query-writing/SKILL.md</code>: escrever SQL.</li>
+              <li><code>chinook.db</code>: banco de exemplo esperado pelo código.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">Este é exemplo de estudo. Para produto real, use o Data Agent com conexão por sessão e regras de permissão.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Deep Research">
+      <div class="page">
+        <div class="kicker">Open Deep Research</div>
+        <h2>Pesquisa profunda é um fluxo, não uma única chamada de modelo.</h2>
+        <div class="flow">
+          <div class="step"><strong>Clarificar</strong><span>Decide se precisa perguntar algo antes.</span></div>
+          <div class="step"><strong>Briefing</strong><span>Transforma pergunta em plano pesquisável.</span></div>
+          <div class="step"><strong>Supervisor</strong><span>Coordena subpesquisas.</span></div>
+          <div class="step"><strong>Researcher</strong><span>Executa busca, tools e compressão.</span></div>
+          <div class="step"><strong>Relatório</strong><span>Gera resposta final consolidada.</span></div>
+        </div>
+        <p class="note">Estude esse agent quando quiser aprender composição: grafo principal, subgraph supervisor e subgraph researcher.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Scripts">
+      <div class="page">
+        <div class="kicker">scripts</div>
+        <h2>Scripts são a memória operacional do projeto.</h2>
+        <table>
+          <tr><th>Script</th><th>Função</th></tr>
+          <tr><td><code>build-docker.sh</code></td><td>Builda imagem por ambiente, mascarando variáveis sensíveis no output.</td></tr>
+          <tr><td><code>run-docker.sh</code></td><td>Carrega `.env.<env>` e sobe serviços Docker Compose.</td></tr>
+          <tr><td><code>stop-docker.sh</code></td><td>Para e remove container de ambiente específico.</td></tr>
+          <tr><td><code>logs-docker.sh</code></td><td>Segue logs do container do ambiente.</td></tr>
+          <tr><td><code>set_env.sh</code></td><td>Carrega variáveis de ambiente quando usado com `source`.</td></tr>
+          <tr><td><code>docker-entrypoint.sh</code></td><td>Carrega env, valida segredos obrigatórios e executa o comando do container.</td></tr>
+          <tr><td><code>ensure-db-user.sh</code></td><td>Garante role, senha, database e permissões no Postgres local.</td></tr>
+          <tr><td><code>01-init-extensions.sql</code></td><td>Habilita extensão `vector` para pgvector em volume novo.</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Frontend">
+      <div class="page">
+        <div class="kicker">frontend</div>
+        <h2>O frontend mostra o agent trabalhando.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Fluxo de tela</h3>
+            <ul>
+              <li><code>LoginScreen</code>: cadastro/login.</li>
+              <li><code>AuthContext</code>: token de usuário e token de sessão.</li>
+              <li><code>ChatScreen</code>: conversa e stream.</li>
+              <li><code>SourcesPanel</code>: banco e pasta para o Data Agent.</li>
+              <li><code>AgentActivity</code>: passos das tools.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>API client</h3>
+            <p><code>frontend/src/lib/api.ts</code> centraliza chamadas para auth, sessões, fontes e streaming SSE.</p>
+            <p class="mini">O Vite usa proxy `/api` para o backend em `localhost:8000`.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Observabilidade">
+      <div class="page">
+        <div class="kicker">Observabilidade</div>
+        <h2>Agente em produção precisa ser observado.</h2>
+        <div class="grid three">
+          <div class="card">
+            <h3>Langfuse</h3>
+            <p>Tracing de chamadas de LLM, metadados, sessões e custo.</p>
+          </div>
+          <div class="card">
+            <h3>Prometheus</h3>
+            <p>Métricas HTTP, duração de stream, tools e inferência.</p>
+          </div>
+          <div class="card">
+            <h3>Grafana</h3>
+            <p>Dashboards provisionados para visualizar latência e saúde.</p>
+          </div>
+        </div>
+        <p class="note">Sem tracing e métricas, você não sabe se o agent está ajudando, errando, ficando caro ou lento.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Testes e evals">
+      <div class="page">
+        <div class="kicker">Testes e avaliação</div>
+        <h2>Teste mecânica. Avalie qualidade.</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Testes</h3>
+            <ul>
+              <li><code>tests/integration</code> cobre auth, health, chatbot, deep research, guardrails e text-to-SQL.</li>
+              <li>Fixtures mockam OpenAI e Langfuse.</li>
+              <li>Use <code>uv run pytest tests/</code>.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Evals</h3>
+            <ul>
+              <li><code>src/evals</code> avalia respostas usando traces.</li>
+              <li>Métricas são prompts markdown.</li>
+              <li>Inclui relevancy, helpfulness, conciseness, hallucination e toxicity.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">Teste responde "quebrou?". Eval responde "continua bom?".</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Roteiro novo agent">
+      <div class="page">
+        <div class="kicker">Criando seu primeiro agent</div>
+        <h2>Roteiro prático em 10 passos</h2>
+        <ol>
+          <li>Escreva o problema em <code>CONTEXT.md</code>.</li>
+          <li>Defina usuário, dados, limites e primeira tarefa útil.</li>
+          <li>Escolha a camada: LangGraph, Deep Agents ou LangChain simples.</li>
+          <li>Crie <code>src/app/agents/meu_agent/</code>.</li>
+          <li>Escreva <code>system.md</code> com papel, regras e placeholders.</li>
+          <li>Implemente tools mínimas e seguras.</li>
+          <li>Crie DTOs em <code>api/v1/dtos</code>.</li>
+          <li>Crie rota com auth, rate limit, logging e tratamento de erro.</li>
+          <li>Registre o router em <code>api.py</code> e o rate limit em <code>config.py</code>.</li>
+          <li>Teste import, endpoint, fluxo feliz e erro esperado.</li>
+        </ol>
+        <p class="note">Use `.codex/commands/new-agent.md` como receita de scaffold.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Checklist final">
+      <div class="page">
+        <div class="kicker">Checklist final</div>
+        <h2>Antes de chamar de pronto</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Produto</h3>
+            <ul>
+              <li>O problema está claro?</li>
+              <li>A primeira tarefa é pequena e útil?</li>
+              <li>As fontes de dados estão definidas?</li>
+              <li>O agent sabe quando dizer que não sabe?</li>
+              <li>Há guardrails para dados sensíveis?</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Engenharia</h3>
+            <ul>
+              <li>Sem secrets hardcoded.</li>
+              <li>Rotas com rate limit.</li>
+              <li>Logs estruturados.</li>
+              <li>LLM com tracing.</li>
+              <li>Testes e validação manual.</li>
+            </ul>
+          </div>
+        </div>
+        <p class="lead">Se você entendeu esta apostila, já sabe onde mexer, onde não mexer e como começar pequeno.</p>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Referências internas">
+      <div class="page">
+        <div class="kicker">Referências internas</div>
+        <h2>Arquivos para deixar abertos enquanto estuda</h2>
+        <div class="grid two">
+          <div class="card">
+            <h3>Leitura</h3>
+            <ul>
+              <li><code>README.md</code></li>
+              <li><code>CODEX.md</code></li>
+              <li><code>AGENTS.md</code></li>
+              <li><code>CONTEXT.md</code></li>
+              <li><code>docs/ESTRUTURA_PROJETO.md</code></li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Código</h3>
+            <ul>
+              <li><code>src/app/agents/chatbot/agent_chatbot.py</code></li>
+              <li><code>src/app/agents/data_agent/agent_data.py</code></li>
+              <li><code>src/app/api/v1/data_agent.py</code></li>
+              <li><code>src/app/core/common/config.py</code></li>
+              <li><code>frontend/src/components/ChatScreen.tsx</code></li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">A próxima melhoria natural é transformar esta apostila em um PDF ou em material com exercícios práticos.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="nav" aria-label="Navegação">
+    <button id="prev" type="button" aria-label="Página anterior">‹</button>
+    <span id="counter">1 / 1</span>
+    <button id="next" type="button" aria-label="Próxima página">›</button>
+  </div>
+  <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    const bar = document.getElementById("bar");
+    let index = 0;
+
+    function show(nextIndex) {
+      index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+      slides.forEach((slide, i) => {
+        slide.classList.toggle("active", i === index);
+        if (i === index) {
+          slide.scrollTop = 0;
+        }
+      });
+      counter.textContent = `${index + 1} / ${slides.length}`;
+      bar.style.width = `${((index + 1) / slides.length) * 100}%`;
+      const title = slides[index].dataset.title || "Apostila";
+      document.title = `${title} - Apostila Criando Agents`;
+    }
+
+    function next() {
+      show(index + 1);
+    }
+
+    function prev() {
+      show(index - 1);
+    }
+
+    document.getElementById("next").addEventListener("click", next);
+    document.getElementById("prev").addEventListener("click", prev);
+
+    document.addEventListener("keydown", (event) => {
+      if (["ArrowRight", "PageDown", " "].includes(event.key)) {
+        event.preventDefault();
+        next();
+      }
+      if (["ArrowLeft", "PageUp"].includes(event.key)) {
+        event.preventDefault();
+        prev();
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        show(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        show(slides.length - 1);
+      }
+    });
+
+    show(0);
+  </script>
+</body>
+
+</html>

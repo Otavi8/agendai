@@ -1,170 +1,180 @@
-# AI Agent Development Guide
+# Guia de Desenvolvimento de Agentes de IA
 
-This document provides essential guidelines for AI agents working on this LangGraph FastAPI Agent project.
+Este documento traz diretrizes essenciais para agentes de IA que trabalham neste projeto LangGraph + FastAPI.
 
-## Project Overview
+## Visão Geral do Projeto
 
-This is a production-ready AI agent application built with:
-- **LangGraph** for stateful, multi-step AI agent workflows
-- **FastAPI** for high-performance async REST API endpoints
-- **Langfuse** for LLM observability and tracing
-- **PostgreSQL + pgvector** for long-term memory storage (mem0ai)
-- **JWT authentication** with session management
-- **Prometheus + Grafana** for monitoring
+Esta é uma aplicação de agentes de IA pronta para produção, construída com:
 
-## Quick Reference: Critical Rules
+- **LangGraph** para workflows de agentes com estado e múltiplas etapas
+- **FastAPI** para endpoints REST assíncronos de alta performance
+- **Langfuse** para observabilidade e tracing de LLM
+- **PostgreSQL + pgvector** para armazenamento de memória de longo prazo (mem0ai)
+- **Autenticação JWT** com gerenciamento de sessões
+- **Prometheus + Grafana** para monitoramento
 
-### Import Rules
-- **All imports MUST be at the top of the file** - never add imports inside functions or classes
+## Referência Rápida: Regras Críticas
 
-### Logging Rules
-- Use **structlog** for all logging
-- Log messages must be **lowercase_with_underscores** (e.g., `"user_login_successful"`)
-- **NO f-strings in structlog events** - pass variables as kwargs
-- Use `logger.exception()` instead of `logger.error()` to preserve tracebacks
-- Example: `logger.info("chat_request_received", session_id=session.id, message_count=len(messages))`
+### Regras de Import
 
+- **Todos os imports DEVEM ficar no topo do arquivo**. Nunca adicione imports dentro de funções ou classes.
 
-### Caching Rules
-- **Only cache successful responses**, never cache errors
-- Use appropriate cache TTL based on data volatility
+### Regras de Logging
 
-### FastAPI Rules
-- All routes must have rate limiting decorators
-- Use dependency injection for services, database connections, and auth
-- All database operations must be async
+- Use **structlog** para todos os logs.
+- Mensagens de log devem estar em **lowercase_with_underscores** (ex.: `"user_login_successful"`).
+- **NÃO use f-strings em eventos do structlog**. Passe variáveis como kwargs.
+- Use `logger.exception()` em vez de `logger.error()` para preservar tracebacks.
+- Exemplo: `logger.info("chat_request_received", session_id=session.id, message_count=len(messages))`
 
-## Code Style Conventions
+### Regras de Cache
+
+- **Faça cache apenas de respostas bem-sucedidas**, nunca de erros.
+- Use TTL adequado conforme a volatilidade dos dados.
+
+### Regras FastAPI
+
+- Todas as rotas devem ter decorators de rate limiting.
+- Use dependency injection para serviços, conexões de banco e autenticação.
+- Todas as operações de banco devem ser assíncronas.
+
+## Convenções de Estilo de Código
 
 ### Python/FastAPI
-- Use `async def` for asynchronous operations
-- Use type hints for all function signatures
-- Prefer Pydantic models over raw dictionaries
-- Use functional, declarative programming; avoid classes except for services and agents
-- File naming: lowercase with underscores (e.g., `user_routes.py`)
-- Use the RORO pattern (Receive an Object, Return an Object)
 
-### Error Handling
-- Handle errors at the beginning of functions
-- Use early returns for error conditions
-- Place the happy path last in the function
-- Use guard clauses for preconditions
-- Use `HTTPException` for expected errors with appropriate status codes
+- Use `async def` para operações assíncronas.
+- Use type hints em todas as assinaturas de função.
+- Prefira modelos Pydantic a dicionários crus.
+- Use programação funcional e declarativa; evite classes exceto para serviços e agentes.
+- Nome de arquivo: minúsculo com underscores (ex.: `user_routes.py`).
+- Use o padrão RORO (Receive an Object, Return an Object).
 
-## LangGraph & LangChain Patterns
+### Tratamento de Erros
 
-### Graph Structure
-- Use `StateGraph` for building AI agent workflows
-- Define clear state schemas using Pydantic models
-- Use `CompiledStateGraph` for production workflows
-- Implement `AsyncPostgresSaver` for checkpointing and persistence
-- Use `Command` for controlling graph flow between nodes
+- Trate erros no início das funções.
+- Use retornos antecipados para condições de erro.
+- Deixe o caminho feliz por último na função.
+- Use guard clauses para pré-condições.
+- Use `HTTPException` para erros esperados com status codes adequados.
 
-## Database Operations
-- Use SQLModel for ORM models (combines SQLAlchemy + Pydantic)
-- Use async database operations with asyncpg
-- Use LangGraph's AsyncPostgresSaver for agent checkpointing
+## Padrões LangGraph e LangChain
 
-## Performance Guidelines
+### Estrutura de Grafo
 
-- Minimize blocking I/O operations
-- Use async for all database and external API calls
-- Implement caching for frequently accessed data
-- Use connection pooling for database connections
-- Optimize LLM calls with streaming responses
+- Use `StateGraph` para construir workflows de agentes de IA.
+- Defina schemas de estado claros usando modelos Pydantic.
+- Use `CompiledStateGraph` para workflows em produção.
+- Implemente `AsyncPostgresSaver` para checkpointing e persistência.
+- Use `Command` para controlar o fluxo do grafo entre nós.
 
-## Observability
+## Operações de Banco de Dados
 
-- Integrate Langfuse for LLM tracing on all agent operations
-- Export Prometheus metrics for API performance
-- Use structured logging with context binding (request_id, session_id, user_id)
-- Track LLM inference duration, token usage, and costs
+- Use SQLModel para modelos ORM (combina SQLAlchemy + Pydantic).
+- Use operações assíncronas de banco com asyncpg.
+- Use `AsyncPostgresSaver` do LangGraph para checkpointing de agentes.
 
-## Testing & Evaluation
+## Diretrizes de Performance
 
-- Implement metric-based evaluations for LLM outputs (see `src/evals/` directory)
-- Create custom evaluation metrics as markdown files in `src/evals/metrics/prompts/`
-- Use Langfuse traces for evaluation data sources
-- Generate JSON reports with success rates
+- Minimize operações de I/O bloqueantes.
+- Use async para todas as chamadas de banco e APIs externas.
+- Implemente cache para dados acessados com frequência.
+- Use connection pooling para conexões de banco.
+- Otimize chamadas de LLM com respostas em streaming.
 
-## Configuration Management
+## Observabilidade
 
-- Use environment-specific configuration files (`.env.development`, `.env.staging`, `.env.production`)
-- Use Pydantic Settings for type-safe configuration (see `app/core/config.py`)
-- Never hardcode secrets or API keys
+- Integre Langfuse para tracing de LLM em todas as operações dos agentes.
+- Exporte métricas Prometheus para performance da API.
+- Use logging estruturado com context binding (`request_id`, `session_id`, `user_id`).
+- Acompanhe duração de inferência da LLM, uso de tokens e custos.
 
-## Key Dependencies
+## Testes e Avaliação
 
-- **FastAPI** - Web framework
-- **LangGraph** - Agent workflow orchestration
-- **LangChain** - LLM abstraction and tools
-- **Langfuse** - LLM observability and tracing
-- **Pydantic v2** - Data validation and settings
-- **structlog** - Structured logging
-- **mem0ai** - Long-term memory management
-- **PostgreSQL + pgvector** - Database and vector storage
-- **SQLModel** - ORM for database models
-- **tenacity** - Retry logic
-- **rich** - Terminal formatting
-- **slowapi** - Rate limiting
-- **prometheus-client** - Metrics collection
+- Implemente avaliações baseadas em métricas para saídas de LLM (veja o diretório `src/evals/`).
+- Crie métricas customizadas como arquivos markdown em `src/evals/metrics/prompts/`.
+- Use traces do Langfuse como fontes de dados para avaliação.
+- Gere relatórios JSON com taxas de sucesso.
 
-## 10 Commandments for This Project
+## Gerenciamento de Configuração
 
-1. All routes must have rate limiting decorators
-2. All LLM operations must have Langfuse tracing
-3. All async operations must have proper error handling
-4. All logs must follow structured logging format with lowercase_underscore event names
-5. All retries must use tenacity library
-6. All console outputs should use rich formatting
-7. All caching should only store successful responses
-8. All imports must be at the top of files
-9. All database operations must be async
-10. All endpoints must have proper type hints and Pydantic models
+- Use arquivos de configuração por ambiente (`.env.development`, `.env.staging`, `.env.production`).
+- Use Pydantic Settings para configuração tipada (veja `app/core/config.py`).
+- Nunca deixe secrets ou chaves de API hardcoded.
 
-## Common Pitfalls to Avoid
+## Dependências Principais
 
-- ❌ Using f-strings in structlog events
-- ❌ Adding imports inside functions
-- ❌ Forgetting rate limiting decorators on routes
-- ❌ Missing Langfuse tracing on LLM calls
-- ❌ Caching error responses
-- ❌ Using `logger.error()` instead of `logger.exception()` for exceptions
-- ❌ Blocking I/O operations without async
-- ❌ Hardcoding secrets or API keys
-- ❌ Missing type hints on function signatures
+- **FastAPI**: framework web
+- **LangGraph**: orquestração de workflows de agentes
+- **LangChain**: abstração de LLM e ferramentas
+- **Langfuse**: observabilidade e tracing de LLM
+- **Pydantic v2**: validação de dados e settings
+- **structlog**: logging estruturado
+- **mem0ai**: gerenciamento de memória de longo prazo
+- **PostgreSQL + pgvector**: banco de dados e armazenamento vetorial
+- **SQLModel**: ORM para modelos de banco
+- **tenacity**: lógica de retry
+- **rich**: formatação de terminal
+- **slowapi**: rate limiting
+- **prometheus-client**: coleta de métricas
 
-## When Making Changes
+## 10 Mandamentos Deste Projeto
 
-Before modifying code:
-1. Read the existing implementation first
-2. Check for related patterns in the codebase
-3. Ensure consistency with existing code style
-4. Add appropriate logging with structured format
-5. Include error handling with early returns
-6. Add type hints and Pydantic models
-7. Verify Langfuse tracing is enabled for LLM calls
+1. Todas as rotas devem ter decorators de rate limiting.
+2. Todas as operações de LLM devem ter tracing Langfuse.
+3. Todas as operações assíncronas devem ter tratamento de erro adequado.
+4. Todos os logs devem seguir logging estruturado com nomes de evento em `lowercase_underscore`.
+5. Todos os retries devem usar a biblioteca tenacity.
+6. Todas as saídas de console devem usar formatação rich.
+7. Todo cache deve armazenar apenas respostas bem-sucedidas.
+8. Todos os imports devem ficar no topo dos arquivos.
+9. Todas as operações de banco devem ser assíncronas.
+10. Todos os endpoints devem ter type hints e modelos Pydantic adequados.
 
-## References
+## Armadilhas Comuns a Evitar
 
-- LangGraph Documentation: https://langchain-ai.github.io/langgraph/
-- LangChain Documentation: https://python.langchain.com/docs/
-- FastAPI Documentation: https://fastapi.tiangolo.com/
-- Langfuse Documentation: https://langfuse.com/docs
+- Usar f-strings em eventos do `structlog`.
+- Adicionar imports dentro de funções.
+- Esquecer decorators de rate limiting em rotas.
+- Deixar chamadas de LLM sem tracing Langfuse.
+- Fazer cache de respostas de erro.
+- Usar `logger.error()` em vez de `logger.exception()` para exceções.
+- Fazer I/O bloqueante sem async.
+- Deixar secrets ou chaves de API hardcoded.
+- Omitir type hints em assinaturas de função.
 
+## Ao Fazer Alterações
 
-# Task execution plan
-Important: Always plan the task step by step before writing code. Ask for permission to proceed with the plan.
-Important: Before proceed with the plan, create a new file named `.claude/plans/name-of-the-task.md`. Based on the approved plan, list all necessary implementation steps as GitHub-style checkboxes (`- [ ] Step Description`). Use sub-bullets for granular details within each main step.
+Antes de modificar código:
 
-- Plans should be detailed enough to execute without ambiguity
-- Each task in the plan must include at least one validation test to verify it works
-- Assess complexity and single-pass feasibility - can an agent realistically complete this in one go?
-- Include a complexity indicator at the top of each plan:
-  ✅ Simple - Single-pass executable, low risk
-  ⚠️ Medium - May need iteration, some complexity
-  🔴 Complex - Break into sub-plans before executing
+1. Leia primeiro a implementação existente.
+2. Verifique padrões relacionados no codebase.
+3. Garanta consistência com o estilo de código existente.
+4. Adicione logging adequado em formato estruturado.
+5. Inclua tratamento de erros com retornos antecipados.
+6. Adicione type hints e modelos Pydantic.
+7. Verifique se o tracing Langfuse está habilitado para chamadas de LLM.
 
-**CRITICAL: After you successfully complete each step, you MUST update the `.claude/plans/name-of-the-task.md` file by changing the corresponding checkbox from `- [ ]` to `- [x]`.**
-Only proceed to the *next* unchecked item after confirming the previous one is checked off in the file. Announce which step you are starting.
+## Referências
 
+- Documentação LangGraph: https://langchain-ai.github.io/langgraph/
+- Documentação LangChain: https://python.langchain.com/docs/
+- Documentação FastAPI: https://fastapi.tiangolo.com/
+- Documentação Langfuse: https://langfuse.com/docs
+
+# Plano de Execução de Tarefas
+
+Importante: sempre planeje a tarefa passo a passo antes de escrever código. Peça permissão para prosseguir com o plano.
+
+Importante: antes de prosseguir com o plano, crie um novo arquivo chamado `.codex/plans/name-of-the-task.md`. Com base no plano aprovado, liste todas as etapas necessárias de implementação como checkboxes no estilo GitHub (`- [ ] Descrição da etapa`). Use subitens para detalhes granulares dentro de cada etapa principal.
+
+- Os planos devem ser detalhados o suficiente para execução sem ambiguidade.
+- Cada tarefa do plano deve incluir ao menos um teste de validação para confirmar que funciona.
+- Avalie a complexidade e a viabilidade em uma única passada: um agente consegue realisticamente concluir isso de uma vez?
+- Inclua um indicador de complexidade no topo de cada plano:
+  - Simples: executável em uma passada, baixo risco.
+  - Médio: pode exigir iteração, alguma complexidade.
+  - Complexo: divida em subplanos antes de executar.
+
+**CRÍTICO: depois de concluir cada etapa com sucesso, você DEVE atualizar o arquivo `.codex/plans/name-of-the-task.md`, alterando o checkbox correspondente de `- [ ]` para `- [x]`.**
+
+Prossiga apenas para o *próximo* item não marcado depois de confirmar que o anterior foi marcado no arquivo. Anuncie qual etapa está começando.

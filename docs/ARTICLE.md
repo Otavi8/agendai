@@ -1,86 +1,86 @@
-# Building a production-ready AI agent harness
+# Construindo um agent harness de IA pronto para produção
 
-Most tutorials get you to a notebook agent fast: tools, streaming tokens, maybe a cute demo. Production is the rest: auth, rate limits, what you do when the model echoes a card number, injection checks on the way in, PII redaction on the way out, tracing you can replay six tool calls deep, checkpoints that survive restarts, a chart that explains a 3am latency spike, evals before users notice drift, eviction when a tool dumps 80k characters into context, and retries with backoff so one upstream timeout does not brick the session. Nobody hands you that checklist when they say "just use LangGraph."
+A maioria dos tutoriais leva você rapidamente até um agente em notebook: ferramentas, tokens em streaming, talvez uma demonstração bonita. Produção é o restante: autenticação, rate limits, o que fazer quando o modelo ecoa um número de cartão, checagens contra prompt injection na entrada, redação de PII na saída, tracing que permite reproduzir seis chamadas de ferramenta, checkpoints que sobrevivem a restarts, gráficos que explicam um pico de latência às 3h, evals antes de usuários perceberem drift, despejo de ferramentas enormes para fora do contexto e retries com backoff para que um timeout upstream não quebre a sessão. Ninguém entrega essa checklist quando diz "é só usar LangGraph".
 
-The gap between that demo and something you would actually run in traffic is wide. Teams still end up rebuilding the same plumbing, often from scratch.
+A distância entre a demo e algo que você colocaria sob tráfego real é grande. Times ainda acabam reconstruindo a mesma infraestrutura, muitas vezes do zero.
 
-An agent harness is the boring name for the shell around the model: auth, guardrails, memory, persistence, observability, deployment. Same idea as a test harness, except the assertions are policies and outages. The agent file keeps what makes that agent different; the harness carries everything repeated across agents.
+Um agent harness é o nome sem glamour para a casca ao redor do modelo: auth, guardrails, memória, persistência, observabilidade e deployment. É a mesma ideia de um test harness, mas aqui as asserções são políticas e modos de falha. O arquivo do agente guarda o que torna aquele agente diferente; o harness carrega tudo que se repete entre agentes.
 
-Agents are not stateless functions. They keep threads, remember preferences, call flaky tools, and emit text that needs checks before it hits the client. If you push all of that into the graph, reuse dies and every new agent starts as a fork of the last mess.
+Agentes não são funções stateless. Eles mantêm threads, lembram preferências, chamam ferramentas instáveis e emitem texto que precisa ser checado antes de chegar ao cliente. Se você empurra tudo isso para dentro do grafo, o reuso morre e cada novo agente começa como um fork do problema anterior.
 
-This article walks the architecture of one such harness: LangGraph, FastAPI, Langfuse, PostgreSQL with pgvector, MCP, and skills-style markdown. The code in this repo is the reference. You own the agent behavior; the harness owns the cross-cutting layers.
+Este artigo percorre a arquitetura de um harness assim: LangGraph, FastAPI, Langfuse, PostgreSQL com pgvector, MCP e markdown no estilo skills. O código deste repositório é a referência. Você controla o comportamento do agente; o harness controla as camadas transversais.
 
-There is also composable agent middleware (`AgentPipeline`, `AgentMiddleware`): per-invocation hooks for logging, errors, memory, guardrails, context trimming, and model/tool boundaries, distinct from FastAPI HTTP middleware. Hook names, ordering, and how the chatbot differs from Deep Agents are in [How middleware shapes a production agent harness](./middleware-for-agent-harness.md).
+Também existe middleware componível de agente (`AgentPipeline`, `AgentMiddleware`): hooks por invocação para logging, erros, memória, guardrails, trimming de contexto e fronteiras de modelo/ferramenta, separados do middleware HTTP do FastAPI. Nomes de hooks, ordenação e diferenças entre o chatbot e Deep Agents estão em [Como o middleware molda um agent harness de produção](./middleware-for-agent-harness.md).
 
 ```mermaid
 flowchart LR
   Client --> FastAPI
-  FastAPI --> Auth["JWT Auth"]
+  FastAPI --> Auth["Auth JWT"]
   Auth --> Harness["Agent Harness"]
   Harness --> LangGraph
-  LangGraph --> Tools["Built-in Tools"]
-  LangGraph --> MCP["MCP Servers"]
-  Harness --> Memory["Long-Term Memory\n(mem0 + pgvector)"]
-  Harness --> Checkpoint["State Persistence\n(AsyncPostgresSaver)"]
-  Harness --> Langfuse["Observability\n(Langfuse)"]
+  LangGraph --> Tools["Ferramentas internas"]
+  LangGraph --> MCP["Servidores MCP"]
+  Harness --> Memory["Memória de longo prazo\n(mem0 + pgvector)"]
+  Harness --> Checkpoint["Persistência de estado\n(AsyncPostgresSaver)"]
+  Harness --> Langfuse["Observabilidade\n(Langfuse)"]
   FastAPI --> Prometheus
   Prometheus --> Grafana
 ```
 
 ---
 
-## 1. Project architecture
+## 1. Arquitetura do projeto
 
-Agent code and infrastructure stay in separate trees. Rough layout:
+Código de agente e infraestrutura ficam em árvores separadas. Visão aproximada:
 
-```
+```text
 src/
 ├── app/
-│   ├── agents/              # Self-contained agent directories
-│   │   ├── chatbot/         # Reference agent implementation
-│   │   ├── open_deep_research/  # Multi-agent research workflow
-│   │   ├── text_to_sql/     # Text-to-SQL agent
-│   │   └── tools/           # Shared tools (search, think)
+│   ├── agents/              # Diretórios autocontidos de agentes
+│   │   ├── chatbot/         # Implementação de agente de referência
+│   │   ├── open_deep_research/  # Workflow de pesquisa multiagente
+│   │   ├── text_to_sql/     # Agente text-to-SQL
+│   │   └── tools/           # Ferramentas compartilhadas (search, think)
 │   ├── api/
-│   │   ├── v1/              # Versioned API routes
-│   │   ├── metrics/         # Prometheus middleware
-│   │   ├── security/        # Auth and rate limiting
+│   │   ├── v1/              # Rotas versionadas da API
+│   │   ├── metrics/         # Middleware Prometheus
+│   │   ├── security/        # Auth e rate limiting
 │   │   └── logging_context.py
-│   └── core/                # Shared infrastructure
-│       ├── middleware/      # Composable agent middleware (AgentPipeline, hooks)
-│       ├── guardrails/      # Input/output safety
-│       ├── context/         # LLM context overflow prevention
-│       ├── memory/          # Long-term memory (mem0)
-│       ├── checkpoint/      # State persistence
+│   └── core/                # Infraestrutura compartilhada
+│       ├── middleware/      # Middleware componível de agente (AgentPipeline, hooks)
+│       ├── guardrails/      # Segurança de entrada/saída
+│       ├── context/         # Prevenção de overflow de contexto LLM
+│       ├── memory/          # Memória de longo prazo (mem0)
+│       ├── checkpoint/      # Persistência de estado
 │       ├── mcp/             # Model Context Protocol
-│       ├── metrics/         # Prometheus definitions
-│       ├── llm/             # LLM utilities
-│       ├── db/              # Database connections
-│       └── common/          # Config, logging, models
-├── evals/                   # Evaluation framework
-├── mcp/                     # Sample MCP server
-└── cli/                     # CLI clients
+│       ├── metrics/         # Definições Prometheus
+│       ├── llm/             # Utilitários de LLM
+│       ├── db/              # Conexões de banco
+│       └── common/          # Config, logging, modelos
+├── evals/                   # Framework de avaliação
+├── mcp/                     # Servidor MCP de exemplo
+└── cli/                     # Clientes CLI
 ```
 
-Agents live in self-contained directories under `src/app/agents/`: graph, prompt, tools. Auth, memory, checkpointing, guardrails, metrics, and the agent middleware stack in `src/app/core/middleware/` ([middleware article](./middleware-for-agent-harness.md)) come in through `src/app/core/`.
+Agentes vivem em diretórios autocontidos em `src/app/agents/`: grafo, prompt e ferramentas. Auth, memória, checkpointing, guardrails, métricas e a stack de middleware de agente em `src/app/core/middleware/` entram por `src/app/core/`.
 
-Three reference agents show three shapes of graph:
+Três agentes de referência mostram três formatos:
 
-| Agent | Architecture | Pattern |
+| Agente | Arquitetura | Padrão |
 |---|---|---|
-| Chatbot | Custom graph workflow | Linear pipeline with tool loop and guardrail nodes |
-| Deep research | Multi-agent supervisor/researcher | Nested subgraphs with parallel delegation |
-| Text-to-SQL | ReAct (via Deep Agents) | Reasoning-action loop with skills and memory files |
+| Chatbot | Workflow de grafo customizado | Pipeline linear com loop de ferramentas e nós de guardrail |
+| Deep research | Supervisor/researcher multiagente | Subgraphs aninhados com delegação paralela |
+| Text-to-SQL | ReAct via Deep Agents | Loop reasoning-action com skills e arquivos de memória |
 
 ---
 
-## 2. Agent architecture approaches
+## 2. Abordagens de arquitetura de agentes
 
-Nothing forces one pattern. The three agents are intentionally different: small explicit graph, nested supervisors, packaged ReAct.
+Nada obriga um único padrão. Os três agentes são intencionalmente diferentes: grafo explícito pequeno, supervisores aninhados e ReAct empacotado.
 
-### Approach 1: Custom graph workflow (chatbot)
+### Abordagem 1: workflow de grafo customizado (chatbot)
 
-The chatbot is a hand-written LangGraph `StateGraph`: every node and edge is explicit, which makes routing obvious in code review.
+O chatbot é um `StateGraph` LangGraph escrito manualmente: cada nó e aresta é explícito, o que torna o roteamento óbvio em code review.
 
 ```mermaid
 flowchart LR
@@ -93,7 +93,7 @@ flowchart LR
   OutputGuardrail --> End
 ```
 
-The graph is built in `_create_graph()`:
+O grafo é construído em `_create_graph()`:
 
 ```python
 async def _create_graph(self) -> StateGraph:
@@ -110,7 +110,7 @@ async def _create_graph(self) -> StateGraph:
     return graph_builder
 ```
 
-Each node returns a `Command` that controls routing. The chat node decides whether to route to tools or the output guardrail based on the LLM response:
+Cada nó retorna um `Command` que controla o roteamento. O nó de chat decide se vai para ferramentas ou para o output guardrail com base na resposta da LLM:
 
 ```python
 async def _chat_node(self, state: GraphState, config: RunnableConfig) -> Command:
@@ -128,14 +128,14 @@ async def _chat_node(self, state: GraphState, config: RunnableConfig) -> Command
     return Command(update={"messages": [response_message]}, goto=goto)
 ```
 
-The state schema stays small; LangGraph's `add_messages` reducer handles message accumulation:
+O schema de estado fica pequeno; o reducer `add_messages` do LangGraph cuida do acúmulo de mensagens:
 
 ```python
 class GraphState(MessagesState):
     long_term_memory: str
 ```
 
-System prompts are markdown templates with placeholders that get filled at invocation time:
+System prompts são templates markdown com placeholders preenchidos na invocação:
 
 ```markdown
 # Name: {agent_name}
@@ -148,15 +148,15 @@ System prompts are markdown templates with placeholders that get filled at invoc
 {current_date_and_time}
 ```
 
-Use this when you want assistants or chatbots where every branch is a deliberate node: easy to diagram, easy to patch, painful to scale to fifty nodes if you are not disciplined.
+Use este padrão quando quiser assistentes ou chatbots em que cada desvio seja um nó deliberado: fácil de diagramar, fácil de alterar e exigente quando o grafo cresce demais.
 
-### Approach 2: Multi-agent supervisor/researcher (deep research)
+### Abordagem 2: supervisor/researcher multiagente (deep research)
 
-Deep research nests subgraphs: a supervisor plans, then fans out to researcher subagents in parallel. Each researcher is its own compiled LangGraph with a ReAct-style tool loop.
+Deep research aninha subgraphs: um supervisor planeja e delega para subagentes pesquisadores em paralelo. Cada pesquisador é seu próprio LangGraph compilado com um loop estilo ReAct.
 
 ```mermaid
 flowchart TB
-  subgraph main ["Main Graph"]
+  subgraph main ["Grafo principal"]
     InputGuardrail["input_guardrail"] --> Clarify["clarify_with_user"]
     Clarify --> Brief["write_research_brief"]
     Brief --> Supervisor["research_supervisor\n(subgraph)"]
@@ -164,22 +164,22 @@ flowchart TB
     FinalReport --> OutputGuardrail["output_guardrail"]
   end
 
-  subgraph supervisor ["Supervisor Subgraph"]
+  subgraph supervisor ["Subgraph supervisor"]
     SupervisorNode["supervisor"] --> SupervisorTools["supervisor_tools"]
-    SupervisorTools -->|"ConductResearch"| ResearcherGraph["researcher\n(subgraph, parallel)"]
+    SupervisorTools -->|"ConductResearch"| ResearcherGraph["researcher\n(subgraph, paralelo)"]
     SupervisorTools -->|"think_tool"| SupervisorNode
     ResearcherGraph --> SupervisorNode
     SupervisorTools -->|"ResearchComplete"| SupervisorEnd["END"]
   end
 
-  subgraph researcher ["Researcher Subgraph"]
+  subgraph researcher ["Subgraph researcher"]
     ResearcherNode["researcher"] --> ResearcherTools["researcher_tools"]
     ResearcherTools -->|"continue"| ResearcherNode
     ResearcherTools -->|"done"| Compress["compress_research"]
   end
 ```
 
-The main graph composes these subgraphs as nodes:
+O grafo principal compõe esses subgraphs como nós:
 
 ```python
 def _build_deep_research_graph(self) -> StateGraph:
@@ -198,7 +198,7 @@ def _build_deep_research_graph(self) -> StateGraph:
     return deep_researcher_builder
 ```
 
-The supervisor delegates research tasks to sub-researchers in parallel using `asyncio.gather`:
+O supervisor delega tarefas de pesquisa em paralelo usando `asyncio.gather`:
 
 ```python
 research_tasks = [
@@ -211,13 +211,13 @@ research_tasks = [
 tool_results = await asyncio.gather(*research_tasks)
 ```
 
-Each researcher runs its own ReAct loop: search tools, `think_tool`, up to `MAX_REACT_TOOL_CALLS`, then compress into a summary.
+Cada researcher roda seu próprio loop ReAct: ferramentas de busca, `think_tool`, até `MAX_REACT_TOOL_CALLS`, depois comprime o resultado em um resumo.
 
-Use this for research or analysis where you can slice work into parallel chunks and still want clear subgraph boundaries.
+Use isso para pesquisa ou análise em que o trabalho pode ser dividido em partes paralelas mantendo limites claros de subgraph.
 
-### Approach 3: ReAct with Deep Agents (text-to-SQL)
+### Abordagem 3: ReAct com Deep Agents (text-to-SQL)
 
-Text-to-SQL skips hand-drawn graphs and uses the Deep Agents package (`deepagents`): a ReAct loop plus markdown skills and on-disk memory files.
+Text-to-SQL evita desenhar grafos manualmente e usa o pacote Deep Agents (`deepagents`): um loop ReAct com skills markdown e arquivos de memória em disco.
 
 ```python
 def create_sql_deep_agent():
@@ -238,17 +238,15 @@ def create_sql_deep_agent():
     return agent
 ```
 
-Configuration leans on markdown instead of Python:
+A configuração fica mais em markdown do que em Python:
 
-- `AGENTS.md`: identity, role, safety rules (read-only SQL), planning habits
-- `skills/`: workflow writeups (schema exploration, query writing)
-- `FilesystemBackend`: scratch space for intermediate results and plans
+- `AGENTS.md`: identidade, papel, regras de segurança (SQL read-only), hábitos de planejamento.
+- `skills/`: descrições de workflow (exploração de schema, escrita de queries).
+- `FilesystemBackend`: espaço de rascunho para resultados intermediários e planos.
 
-#### Skills in plain language
+Uma skill é um arquivo markdown que diz quando usá-la e quais passos seguir. O modelo vê descrições curtas no contexto e carrega o corpo longo apenas quando a tarefa combina. Isso evita colocar todo procedimento no system prompt.
 
-A skill here is a markdown file that says when to use it and what steps to follow. The model sees short descriptions up front and pulls the long body only when the task matches, which beats stuffing every procedure into the system prompt.
-
-The SQL agent ships two skills. Schema exploration covers discovery:
+Exemplo de skill de exploração de schema:
 
 ```markdown
 ---
@@ -268,16 +266,11 @@ Use `sql_db_list_tables` tool to see all available tables in the database.
 
 ### 2. Get Schema for Specific Tables
 Use `sql_db_schema` tool with table names to examine columns, data types, and relationships.
-
-### 3. Map Relationships
-Identify how tables connect via foreign keys.
 ```
 
-Query writing walks through planning (`write_todos` on heavy queries), JOIN sanity checks, and guardrails like `LIMIT` plus read-only access.
+Isso é divulgação progressiva: títulos e resumos ficam prontos no contexto, e instruções completas entram sob demanda. Perguntas simples continuam baratas; perguntas difíceis ainda ganham checklist. Muitas vezes, novo comportamento é um `.md` em `skills/`, não uma edição de grafo.
 
-That is progressive disclosure: titles and blurbs stay hot, full instructions load on demand so cheap questions stay cheap, messy questions still get a checklist. New behavior is often a new `.md` in `skills/` rather than a graph edit, at least until you outgrow it.
-
-The wrapper class applies the same harness guardrails (content filter, PII blocking, output safety check) before and after the ReAct loop:
+A classe wrapper aplica os mesmos guardrails do harness (content filter, bloqueio de PII, safety check de saída) antes e depois do loop ReAct:
 
 ```python
 class TextSQLDeepAgent:
@@ -298,29 +291,29 @@ class TextSQLDeepAgent:
         return messages
 ```
 
-Use this when the procedure is easier to explain in prose than in nodes, and you can live with the agent choosing its own ordering (schema, query, fix, repeat) without you enumerating every path.
+Use isso quando o procedimento for mais fácil de explicar em prosa do que em nós e você puder aceitar que o agente escolha sua própria ordem (schema, query, correção, repetição) sem enumerar cada caminho.
 
-### Architecture comparison
+### Comparação de arquitetura
 
-| Dimension | Custom graph | Multi-agent subgraphs | ReAct (Deep Agents) |
+| Dimensão | Grafo customizado | Subgraphs multiagente | ReAct (Deep Agents) |
 |---|---|---|---|
-| Control | Full; every edge is explicit | Hierarchical; delegation boundaries | Thin; agent picks its path |
-| Debuggability | High; flow is deterministic | Medium; subgraph seams are visible | Lower; behavior emerges |
-| Parallelism | Manual | Built in via supervisor | Mostly sequential |
-| Flexibility | Edit nodes in code | Compose subgraphs | Tweak markdown and tools |
-| Best for | Chat, tight loops | Research, parallelizable work | SQL, APIs, domain kits |
+| Controle | Total; cada aresta é explícita | Hierárquico; limites de delegação | Fino; o agente escolhe o caminho |
+| Debuggability | Alta; fluxo determinístico | Média; fronteiras de subgraph visíveis | Menor; comportamento emerge |
+| Paralelismo | Manual | Integrado via supervisor | Principalmente sequencial |
+| Flexibilidade | Editar nós no código | Compor subgraphs | Ajustar markdown e tools |
+| Melhor para | Chat, loops controlados | Pesquisa, trabalho paralelizável | SQL, APIs, kits de domínio |
 
-All three share the same harness infrastructure: guardrails, Langfuse tracing, Prometheus metrics, structured logging, and authentication. The architecture choice only affects what lives inside `src/app/agents/<your_agent>/`.
+Todos compartilham a mesma infraestrutura do harness: guardrails, tracing Langfuse, métricas Prometheus, logging estruturado e autenticação. A escolha de arquitetura só afeta o que vive dentro de `src/app/agents/<your_agent>/`.
 
 ---
 
-## 3. Guardrails: input and output safety
+## 3. Guardrails: segurança de entrada e saída
 
-Guardrails ship as factory functions that return LangGraph-compatible nodes, so each agent can tune checks without copying boilerplate.
+Guardrails são factory functions que retornam nós compatíveis com LangGraph, permitindo que cada agente ajuste as checagens sem copiar boilerplate.
 
-### Input guardrails
+### Guardrails de entrada
 
-Deterministic checks run before the model sees the user text:
+Checagens determinísticas rodam antes do modelo ver o texto do usuário:
 
 ```python
 def create_input_guardrail_node(
@@ -332,33 +325,12 @@ def create_input_guardrail_node(
 ) -> Callable:
 ```
 
-Two layers, in order:
+Duas camadas, nesta ordem:
 
-1. Content filter: banned keywords and prompt-injection regexes.
+1. Filtro de conteúdo: palavras proibidas e regexes de prompt injection.
+2. Detecção de PII: regex para SSN, API keys, cartões etc., com Luhn para cartões.
 
-```python
-PROMPT_INJECTION_PATTERNS: list[str] = [
-    r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)",
-    r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)",
-    r"you\s+are\s+now\s+(?:a|an|in)\s+(?:jailbreak|unrestricted|evil|DAN)",
-    r"override\s+(?:your|all|system)\s+(?:instructions|rules|constraints)",
-    r"reveal\s+(?:your|the|system)\s+(?:prompt|instructions|rules)",
-]
-```
-
-2. PII detection: regex for SSN, API keys, cards, etc., with Luhn on card numbers.
-
-```python
-class PIIType(str, Enum):
-    EMAIL = "email"
-    CREDIT_CARD = "credit_card"
-    IP = "ip"
-    API_KEY = "api_key"
-    PHONE = "phone"
-    SSN = "ssn"
-```
-
-When input is blocked, the guardrail routes directly to `END` with a rejection message:
+Quando a entrada é bloqueada, o guardrail roteia direto para `END` com mensagem de rejeição:
 
 ```python
 if filter_result.is_blocked:
@@ -368,12 +340,12 @@ if filter_result.is_blocked:
     )
 ```
 
-### Output guardrails
+### Guardrails de saída
 
-Before the client sees the reply:
+Antes do cliente ver a resposta:
 
-1. Deterministic PII redaction into tokens like `[REDACTED_EMAIL]` / `[REDACTED_SSN]`, with redact, mask, hash, or block modes.
-2. A small, cheap model classifies SAFE vs UNSAFE; unsafe text is replaced with a canned response.
+1. Redação determinística de PII para tokens como `[REDACTED_EMAIL]` / `[REDACTED_SSN]`, com modos redact, mask, hash ou block.
+2. Um modelo pequeno e barato classifica `SAFE` vs `UNSAFE`; texto inseguro é substituído por uma resposta padrão.
 
 ```python
 async def evaluate_safety(content: str) -> bool:
@@ -384,13 +356,13 @@ async def evaluate_safety(content: str) -> bool:
     return "UNSAFE" not in verdict
 ```
 
-The output guardrail fails open: if the safety model throws, the answer still goes out. That trades strictness for availability; tighten that only if you accept blocking on evaluator outages.
+O output guardrail falha aberto: se o modelo de safety quebrar, a resposta ainda sai. Isso troca rigor por disponibilidade; só endureça se aceitar bloquear respostas quando o avaliador estiver fora.
 
 ---
 
-## 4. Long-term memory (mem0 + pgvector)
+## 4. Memória de longo prazo (mem0 + pgvector)
 
-Per-user semantic memory sits in pgvector. Each invoke pulls similar memories first, then (after the run) extracts new ones from the conversation.
+Memória semântica por usuário fica no pgvector. Cada invocação busca memórias similares primeiro e, depois da execução, extrai novas memórias da conversa.
 
 ```python
 async def get_relevant_memory(user_id: int, query: str) -> str:
@@ -399,14 +371,14 @@ async def get_relevant_memory(user_id: int, query: str) -> str:
     return "\n".join([f"* {result['memory']}" for result in results["results"]])
 ```
 
-Memory updates happen in the background to avoid blocking the response:
+Atualizações de memória rodam em background para não bloquear a resposta:
 
 ```python
 def bg_update_memory(user_id: int, messages: list[dict], metadata: dict = None) -> None:
     asyncio.create_task(update_memory(user_id, messages, metadata))
 ```
 
-Typical `agent_invoke` shape: read memory, run graph, fire-and-forget update:
+Formato típico de `agent_invoke`: lê memória, roda o grafo, dispara atualização sem esperar:
 
 ```python
 async def agent_invoke(self, messages, session_id, user_id=None):
@@ -414,62 +386,25 @@ async def agent_invoke(self, messages, session_id, user_id=None):
     agent_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
 
     response = await self._graph.ainvoke(input=agent_input, config=config)
-    # ... process response ...
-
     bg_update_memory(user_id, messages_dic, {"session_id": session_id, "agent_name": self.name})
     return result
 ```
 
-The memory singleton connects to pgvector using the same PostgreSQL instance as the rest of the application, configured through the shared `Settings` class.
+O singleton de memória conecta ao pgvector usando a mesma instância PostgreSQL do restante da aplicação, configurada pela classe compartilhada `Settings`.
 
 ---
 
-## 5. Context management
+## 5. Gerenciamento de contexto
 
-Long threads and fat tool payloads blow the context window. `src/app/core/context/` does two things: evict huge tool blobs immediately, then summarize history before the model chokes.
+Threads longas e payloads grandes de ferramentas estouram a janela de contexto. `src/app/core/context/` faz duas coisas: despeja blobs enormes de ferramentas imediatamente e resume histórico antes que o modelo engasgue.
 
-### Layer 1: tool result eviction
+### Camada 1: despejo de resultado de ferramenta
 
-When a tool returns a result exceeding ~80,000 characters (~20K tokens), the full output is written to disk and the in-state message is replaced with a compact head/tail preview:
+Quando uma ferramenta retorna resultado acima de um limite grande, o conteúdo completo é salvo em markdown e substituído por um ponteiro curto. Assim, o histórico permanece auditável, mas não ocupa todo o contexto da LLM.
 
-```python
-MAX_TOOL_RESULT_CHARS = 80_000
-PREVIEW_LINES = 5
-MAX_LINE_CHARS = 1_000
+### Camada 2: sumarização antes do modelo
 
-def truncate_tool_call_if_too_long(tool_message: ToolMessage) -> ToolMessage:
-    content = tool_message.content
-    if not isinstance(content, str) or len(content) <= MAX_TOOL_RESULT_CHARS:
-        return tool_message
-
-    file_path = _write_large_result(tool_message.tool_call_id, content)
-    preview = _build_preview(content)
-
-    evicted_content = (
-        f"[Tool result too large ({len(content):,} chars). "
-        f"Full output saved to: {file_path}]\n\n"
-        f"--- Preview (first {PREVIEW_LINES} lines) ---\n"
-        f"{preview['head']}\n...\n"
-        f"--- Preview (last {PREVIEW_LINES} lines) ---\n"
-        f"{preview['tail']}\n\n"
-        f'Use read_file("{file_path}") to access the full content.'
-    )
-
-    return ToolMessage(content=evicted_content, name=tool_message.name, tool_call_id=tool_message.tool_call_id)
-```
-
-The preview is enough to decide whether to pull the full file via `read_file` in chunks. The same truncation runs anywhere tool results are built: built-ins, MCP, parallel calls.
-
-```python
-# In the tool_call node
-outputs.append(truncate_tool_call_if_too_long(
-    ToolMessage(content=tool_result, name=tool_name, tool_call_id=tool_call["id"])
-))
-```
-
-### Layer 2: conversation summarization
-
-Even after eviction, turns stack up. `summarize_if_too_long` runs before each model call and fires around 85% of the configured context window:
+O chatbot chama `summarize_if_too_long` antes de preparar mensagens:
 
 ```python
 async def _chat_node(self, state: GraphState, config: RunnableConfig) -> Command:
@@ -482,78 +417,21 @@ async def _chat_node(self, state: GraphState, config: RunnableConfig) -> Command
 
     system_prompt = load_system_prompt(long_term_memory=state.long_term_memory)
     messages = prepare_messages(condensed_messages, chatbot_model, system_prompt)
-    # ... LLM call ...
 ```
 
-Token counting uses `count_tokens_approximately` from langchain-core for the threshold check. The cheaper character-based heuristic (`NUM_CHARS_PER_TOKEN = 4`) is used for the split-point search and argument truncation to avoid repeated full counts.
+A função não faz nada quando o contexto está dentro do orçamento. Quando dispara, procede em etapas:
 
-The function is a no-op when the context is within budget. When it triggers, it proceeds in two stages:
+1. Trunca argumentos enormes de tool calls antigas sem chamar LLM.
+2. Se ainda estiver grande, separa mensagens antigas e recentes em uma fronteira limpa de `HumanMessage`.
+3. Salva o bloco antigo em markdown e substitui por um resumo gerado por LLM.
 
-Stage 1 is cheap truncation (no extra LLM): old `AIMessage` tool args (think huge `write_file` bodies) get clipped to 2K chars. If that drops you under budget, you stop.
-
-```python
-def _truncate_tool_call_args(messages: list[BaseMessage]) -> list[BaseMessage]:
-    result = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) and msg.tool_calls:
-            truncated_calls = []
-            for tc in msg.tool_calls:
-                new_args = {}
-                for key, value in tc.get("args", {}).items():
-                    if isinstance(value, str) and len(value) > TOOL_ARG_TRUNCATE_CHARS:
-                        new_args[key] = value[:TOOL_ARG_TRUNCATE_CHARS] + f"\n... [truncated, {len(value):,} chars total]"
-                    else:
-                        new_args[key] = value
-                truncated_calls.append({**tc, "args": new_args})
-            result.append(msg.model_copy(update={"tool_calls": truncated_calls}))
-        else:
-            result.append(msg)
-    return result
-```
-
-Stage 2 splits "old" vs "recent" on a `HumanMessage` boundary so tool chains stay intact, dumps the old block to markdown, and replaces it with an LLM summary:
-
-```python
-file_path = _write_messages_to_markdown(old_messages, session_id)
-summary_text = await _generate_summary(truncated_old, llm)
-
-summary_message = HumanMessage(
-    content=(
-        f"[Summary of earlier conversation ({len(old_messages)} messages). "
-        f"Full transcript: {file_path}]\n\n{summary_text}"
-    )
-)
-
-return [summary_message] + recent_messages
-```
-
-The split-point algorithm walks backward from the end of the message list, accumulating characters until it fills ~30% of the model's context window for the "recent" portion. It then snaps forward to the next `HumanMessage` to find a clean boundary:
-
-```python
-def _find_safe_split_index(messages, token_limit):
-    recent_chars_budget = int(token_limit * RECENT_CONTEXT_RATIO * NUM_CHARS_PER_TOKEN)
-    chars_from_end = 0
-
-    for i in range(len(messages) - 1, -1, -1):
-        chars_from_end += _estimate_message_chars(messages[i])
-        if chars_from_end >= recent_chars_budget:
-            raw_split = i + 1
-            break
-
-    # Snap to nearest HumanMessage boundary
-    for j in range(raw_split, len(messages)):
-        if isinstance(messages[j], HumanMessage):
-            return j
-    return 0
-```
-
-If the summarization LLM call itself fails, the function falls back to a plain message-role listing so the conversation can continue without crashing. The full old messages are always preserved in the markdown file regardless of whether the LLM summary succeeds.
+Se a sumarização falhar, a função cai para uma listagem simples de papéis de mensagens, permitindo que a conversa continue. As mensagens antigas completas são preservadas no arquivo markdown independentemente do sucesso do resumo.
 
 ---
 
-## 6. State persistence (checkpointing)
+## 6. Persistência de estado (checkpointing)
 
-`AsyncPostgresSaver` writes full graph state after each node, so a restart does not wipe the thread and you can resume mid-flow.
+`AsyncPostgresSaver` grava o estado completo do grafo após cada nó, então um restart não apaga a thread e você pode retomar um fluxo no meio.
 
 ```python
 async def get_checkpointer():
@@ -568,34 +446,27 @@ async def get_checkpointer():
     return checkpointer
 ```
 
-The checkpointer is compiled into the graph once and reused:
+O checkpointer é compilado no grafo uma vez e reutilizado:
 
 ```python
 self._graph = graph_builder.compile(checkpointer=self.checkpointer, name=self.name)
 ```
 
-Every invocation passes a `thread_id` (the session ID) so LangGraph knows which conversation to resume:
+Toda invocação passa um `thread_id` (o ID da sessão) para o LangGraph saber qual conversa retomar:
 
 ```python
 config["configurable"] = {"thread_id": session_id}
 ```
 
-When a user deletes a session, the harness cleans up checkpoint tables:
-
-```python
-async def clear_checkpoints(session_id: str) -> None:
-    async with conn_pool.connection() as conn:
-        for table in settings.CHECKPOINT_TABLES:
-            await conn.execute(f"DELETE FROM {table} WHERE thread_id = %s", (session_id,))
-```
+Quando o usuário exclui uma sessão, o harness limpa as tabelas de checkpoint.
 
 ---
 
-## 7. Authentication and sessions
+## 7. Autenticação e sessões
 
-JWT auth with one session per conversation: register, log in for a user-scoped token, create a session row per thread you care about.
+Auth JWT com uma sessão por conversa: registrar, logar para obter um token de usuário e criar uma linha de sessão por thread.
 
-Protected endpoints use FastAPI dependency injection:
+Endpoints protegidos usam dependency injection do FastAPI:
 
 ```python
 @router.post("/chat", response_model=ChatResponse)
@@ -607,7 +478,7 @@ async def chat(
 ):
 ```
 
-Rate limiting is configured per-endpoint through environment variables:
+Rate limiting é configurado por endpoint via variáveis de ambiente:
 
 ```python
 default_endpoints = {
@@ -619,17 +490,17 @@ default_endpoints = {
 }
 ```
 
-Inputs get HTML stripped, `<script>` dropped, null bytes filtered, at both validation and API layers.
+Inputs têm HTML removido, `<script>` descartado e null bytes filtrados tanto na validação quanto na camada de API.
 
 ---
 
-## 8. Observability
+## 8. Observabilidade
 
-Tracing, metrics, and logs are separate systems; the app wires all three.
+Tracing, métricas e logs são sistemas separados; a app conecta os três.
 
-### Langfuse tracing
+### Tracing Langfuse
 
-Every LLM call is traced through Langfuse via a callback handler injected into the agent config:
+Toda chamada de LLM é rastreada via Langfuse por um callback handler injetado na config do agente:
 
 ```python
 self._config = {
@@ -641,15 +512,15 @@ self._config = {
 }
 ```
 
-You get the chain of model calls, tools, tokens, and latency per turn from callbacks on the invoke config, without sprinkling trace calls through business logic.
+Você obtém a cadeia de chamadas de modelo, ferramentas, tokens e latência por turno a partir dos callbacks no invoke config, sem espalhar chamadas de tracing na lógica de negócio.
 
 ![Langfuse tracing view showing the full call hierarchy, tool invocations, and graph visualization for an agent execution](../assets/traces.png)
 
 ![Langfuse dashboard showing traces, model costs, usage by model, and user consumption](../assets/langfuse-dashboard.png)
 
-### Prometheus metrics
+### Métricas Prometheus
 
-Histograms and counters cover infra noise and LLM-specific timings:
+Histograms e counters cobrem ruído de infraestrutura e tempos específicos de LLM:
 
 ```python
 llm_inference_duration_seconds = Histogram(
@@ -664,12 +535,9 @@ tool_executions_total = Counter(
     "Total tool executions",
     ["tool_name", "status"]
 )
-
-tokens_in_counter = Counter("llm_tokens_in", "Number of input tokens", ["agent_name"])
-tokens_out_counter = Counter("llm_tokens_out", "Number of output tokens", ["agent_name"])
 ```
 
-Every LLM call flows through `model_invoke_with_metrics()`, which times the inference and records token usage:
+Toda chamada de LLM passa por `model_invoke_with_metrics()`, que mede a inferência e registra uso de tokens:
 
 ```python
 async def model_invoke_with_metrics(model, model_input, model_name, agent_name, config=None):
@@ -679,41 +547,25 @@ async def model_invoke_with_metrics(model, model_input, model_name, agent_name, 
     return response
 ```
 
-`MetricsMiddleware` records HTTP duration, counts, and status codes per route.
+`MetricsMiddleware` registra duração HTTP, contagens e status codes por rota.
 
 ![Grafana LLM Observability dashboard showing token usage, error rates, and tool execution metrics](../assets/graphana_metrics.png)
 
-### Structured logging
+### Logging estruturado
 
-structlog everywhere: `snake_case` event names, kwargs instead of f-strings in the event string, so you can filter in Loki or similar without regex soup.
+structlog em todos os lugares: nomes de evento em `snake_case`, kwargs em vez de f-strings no texto do evento, facilitando filtro em Loki ou similares.
 
 ```python
 logger.info("chat_request_received", session_id=session.id, message_count=len(messages))
 ```
 
-A `LoggingContextMiddleware` extracts `session_id` and `user_id` from the JWT on every request and binds them to the logging context:
-
-```python
-class LoggingContextMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        clear_context()
-        # Extract session_id from JWT
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        session_id = payload.get("sub")
-        if session_id:
-            bind_context(session_id=session_id)
-        response = await call_next(request)
-        clear_context()
-        return response
-```
-
-Dev prints colorized console lines; prod emits JSON. Same code paths, different renderer.
+Um `LoggingContextMiddleware` extrai `session_id` e `user_id` do JWT em cada request e vincula ao contexto de logging. Em desenvolvimento, imprime linhas coloridas; em produção, emite JSON. Mesmos caminhos de código, renderer diferente.
 
 ---
 
-## 9. FastAPI: sync routes and SSE
+## 9. FastAPI: rotas síncronas no contrato e SSE
 
-Chat has both request/response and SSE streaming via `StreamingResponse` and an async generator:
+Chat tem request/response e streaming SSE via `StreamingResponse` e gerador assíncrono:
 
 ```python
 @router.post("/chat/stream")
@@ -723,13 +575,12 @@ async def chat_stream(request, chat_request, session=Depends(get_current_session
 
     async def event_generator():
         full_response = ""
-        with llm_stream_duration_seconds.labels(model=settings.DEFAULT_LLM_MODEL, agent_name=agent.name).time():
-            async for chunk in agent.agent_invoke_stream(
-                chat_request.messages, session.id, user_id=session.user_id
-            ):
-                full_response += chunk
-                response = StreamResponse(content=chunk, done=False)
-                yield f"data: {json.dumps(response.model_dump())}\n\n"
+        async for chunk in agent.agent_invoke_stream(
+            chat_request.messages, session.id, user_id=session.user_id
+        ):
+            full_response += chunk
+            response = StreamResponse(content=chunk, done=False)
+            yield f"data: {json.dumps(response.model_dump())}\n\n"
 
         final_response = StreamResponse(content="", done=True)
         yield f"data: {json.dumps(final_response.model_dump())}\n\n"
@@ -737,29 +588,13 @@ async def chat_stream(request, chat_request, session=Depends(get_current_session
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 ```
 
-Startup uses a lifespan context (MCP init/cleanup, logging), not scattered `@app.on_event` hooks:
-
-```python
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("application_startup", project_name=settings.PROJECT_NAME, version=settings.VERSION)
-    await mcp_dependencies_init()
-    yield
-    await mcp_dependencies_cleanup()
-    logger.info("application_shutdown")
-
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
-setup_metrics(app)
-setup_rate_limit(app)
-app.add_middleware(LoggingContextMiddleware)
-app.add_middleware(MetricsMiddleware)
-```
+Startup usa um contexto de lifespan (init/cleanup de MCP, logging), não vários hooks `@app.on_event` espalhados.
 
 ---
 
 ## 10. MCP (Model Context Protocol)
 
-Tools can come from MCP servers. Sessions spin up at app start and live for the process lifetime so you are not handshaking per request.
+Ferramentas podem vir de servidores MCP. Sessões sobem no startup da app e vivem pelo tempo de vida do processo, evitando handshake por request.
 
 ```python
 class MCPSessionManager:
@@ -780,14 +615,14 @@ class MCPSessionManager:
         return self._resource
 ```
 
-Operational notes:
+Notas operacionais:
 
-- Multiple hosts from `MCP_HOSTNAMES_CSV`
-- Reconnect with backoff on `ClosedResourceError`
-- If MCP is down, the chatbot still runs on built-in tools (degraded, not dead)
-- Correlation IDs on MCP calls so traces line up with logs
+- Múltiplos hosts via `MCP_HOSTNAMES_CSV`.
+- Reconexão com backoff em `ClosedResourceError`.
+- Se MCP cair, o chatbot ainda roda com ferramentas internas (degradado, não morto).
+- Correlation IDs em chamadas MCP para alinhar traces e logs.
 
-MCP tools are loaded once and merged with built-in tools when the graph is compiled:
+Ferramentas MCP são carregadas uma vez e mescladas com ferramentas internas quando o grafo é compilado:
 
 ```python
 def _get_all_tools(self) -> list[BaseTool]:
@@ -796,11 +631,11 @@ def _get_all_tools(self) -> list[BaseTool]:
 
 ---
 
-## 11. Evaluations (LLM-as-judge)
+## 11. Avaliações (LLM-as-judge)
 
-Evals read Langfuse traces, score them with a judge model, and write scores back. Metric definitions are markdown under `src/evals/metrics/prompts/`; a new `.md` file is picked up automatically. Stock prompts cover relevancy, helpfulness, conciseness, hallucination, and toxicity.
+Evals leem traces Langfuse, pontuam com um modelo juiz e escrevem os scores de volta. Definições de métricas são markdown em `src/evals/metrics/prompts/`; um novo `.md` é carregado automaticamente. Os prompts padrão cobrem relevancy, helpfulness, conciseness, hallucination e toxicity.
 
-Each metric prompt instructs the evaluator LLM to score the output on a 0-to-1 scale:
+Cada prompt de métrica instrui a LLM avaliadora a pontuar a saída em uma escala de 0 a 1:
 
 ```markdown
 Evaluate the relevancy of the generation on a continuous scale from 0 to 1.
@@ -812,7 +647,7 @@ A generation can be considered relevant (Score: 1) if it:
 - Stays on topic without introducing unrelated information
 ```
 
-The evaluator fetches un-scored traces from the last 24 hours, runs each metric, and pushes scores back to Langfuse:
+O avaliador busca traces sem score das últimas 24 horas, roda cada métrica e envia scores ao Langfuse:
 
 ```python
 class Evaluator:
@@ -826,7 +661,7 @@ class Evaluator:
                     self._push_to_langfuse(trace, score, metric)
 ```
 
-OpenAI structured outputs keep the judge returning a numeric score plus reasoning:
+Structured outputs da OpenAI mantêm o juiz retornando score numérico e raciocínio:
 
 ```python
 class ScoreSchema(BaseModel):
@@ -834,28 +669,28 @@ class ScoreSchema(BaseModel):
     reasoning: str
 ```
 
-Reports are saved as JSON with per-metric averages and per-trace breakdowns. Run evaluations with:
+Relatórios são salvos como JSON com médias por métrica e detalhamento por trace. Rode avaliações com:
 
 ```bash
-make eval              # Interactive mode
-make eval-quick        # Default settings, no prompts
-make eval-no-report    # Skip report generation
+make eval              # modo interativo
+make eval-quick        # configurações padrão, sem prompts
+make eval-no-report    # pula geração de relatório
 ```
 
 ---
 
-## 12. Configuration
+## 12. Configuração
 
-Settings merge from files in this order (later wins):
+Settings são mescladas a partir de arquivos nesta ordem (os últimos vencem):
 
-```
-.env.{environment}.local  (highest priority, git-ignored)
+```text
+.env.{environment}.local  (maior prioridade, gitignored)
 .env.{environment}
 .env.local
-.env                      (lowest priority)
+.env                      (menor prioridade)
 ```
 
-Four named environments (`development`, `staging`, `production`, `test`) ship with defaults you can override in `.env` or the host environment:
+Quatro ambientes nomeados (`development`, `staging`, `production`, `test`) vêm com defaults que você pode sobrescrever em `.env` ou no ambiente do host:
 
 ```python
 env_settings = {
@@ -870,13 +705,13 @@ env_settings = {
 }
 ```
 
-Real env vars always beat the baked-in defaults, which is how you tune one cluster without forking the repo.
+Variáveis reais de ambiente sempre vencem os defaults embutidos, permitindo ajustar um cluster sem forkar o repo.
 
 ---
 
-## 13. Docker and Compose
+## 13. Docker e Compose
 
-Slim Python image, non-root user, entrypoint script:
+Imagem Python slim, usuário não-root e script de entrypoint:
 
 ```dockerfile
 FROM python:3.13.2-slim
@@ -892,46 +727,46 @@ ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["/app/.venv/bin/uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-Compose brings up Postgres (with pgvector), Prometheus scraping `/metrics`, Grafana dashboards (latency, LLM time, tokens, rate limits), and cAdvisor for container stats.
+Compose sobe Postgres (com pgvector), Prometheus coletando `/metrics`, dashboards Grafana (latência, tempo de LLM, tokens, rate limits) e cAdvisor para estatísticas dos containers.
 
-Makefile targets wrap day-to-day tasks:
+Targets do Makefile encapsulam tarefas do dia a dia:
 
 ```bash
-make dev                              # Start development server with uvloop
-make test                             # Run pytest
-make eval                             # Run evaluations
-make docker-build-env ENV=production  # Build Docker image
-make docker-compose-up ENV=development # Full stack
-make lint                             # Ruff check and format
+make dev                               # inicia servidor de desenvolvimento
+make test                              # roda pytest
+make eval                              # roda avaliações
+make docker-build-env ENV=production   # build da imagem Docker
+make docker-compose-up ENV=development # stack completa
+make lint                              # Ruff check e format
 ```
 
 ---
 
-## 14. Adding your own agent
+## 14. Adicionando seu próprio agente
 
-One directory per agent. Pick the shape from section 2 that matches how much control you need, then copy the closest reference agent and delete what you do not use.
+Um diretório por agente. Escolha o formato da seção 2 que combina com o nível de controle necessário, copie o agente de referência mais próximo e remova o que não usar.
 
-### Step 1: create the agent directory
+### Passo 1: crie o diretório do agente
 
-```
+```text
 src/app/agents/my_agent/
-  __init__.py          # Factory function
-  agent.py             # Agent class with graph definition
-  system.md            # System prompt template (or AGENTS.md for ReAct)
+  __init__.py          # factory function
+  agent.py             # classe do agente com definição de grafo
+  system.md            # template de system prompt (ou AGENTS.md para ReAct)
   tools/
-    __init__.py        # Export tools list
-    my_tool.py         # Custom tool implementations
+    __init__.py        # exporta lista de tools
+    my_tool.py         # implementações customizadas
 ```
 
-### Step 2: choose your architecture
+### Passo 2: escolha a arquitetura
 
-- Custom graph (chatbot): explicit `StateGraph` when you want every edge in code.
-- Multi-agent subgraphs (deep research): compile subgraphs, plug them into a parent graph when work splits cleanly.
-- ReAct / Deep Agents (text-to-SQL): `create_deep_agent` plus markdown and toolkits when prose beats nodes.
+- Grafo customizado (chatbot): `StateGraph` explícito quando você quer cada aresta no código.
+- Subgraphs multiagente (deep research): compile subgraphs e conecte ao grafo pai quando o trabalho se divide bem.
+- ReAct / Deep Agents (text-to-SQL): `create_deep_agent` mais markdown e toolkits quando prosa é melhor que nós.
 
-### Step 3: define the system prompt
+### Passo 3: defina o system prompt
 
-For graph-based agents, `system.md` supports `{long_term_memory}` and `{current_date_and_time}` placeholders, plus any custom kwargs:
+Para agentes baseados em grafo, `system.md` suporta `{long_term_memory}` e `{current_date_and_time}`, além de kwargs customizados:
 
 ```markdown
 # Name: {agent_name}
@@ -946,11 +781,11 @@ Your specific instructions here.
 {current_date_and_time}
 ```
 
-For ReAct agents, use `AGENTS.md` to define the agent's identity, rules, and planning strategies in natural language.
+Para agentes ReAct, use `AGENTS.md` para definir identidade, regras e estratégias de planejamento em linguagem natural.
 
-### Step 4: build the agent class
+### Passo 4: crie a classe do agente
 
-Follow the pattern from the reference agent that matches your chosen architecture. At minimum, implement `agent_invoke` (and optionally `agent_invoke_stream` for SSE support). Apply guardrails either as graph nodes (custom graph / subgraph approaches) or as wrapper logic (ReAct approach):
+Siga o padrão do agente de referência que combina com a arquitetura escolhida. No mínimo, implemente `agent_invoke` e, opcionalmente, `agent_invoke_stream` para SSE. Aplique guardrails como nós de grafo (custom graph / subgraph) ou como lógica wrapper (ReAct):
 
 ```python
 class MyAgent:
@@ -964,9 +799,9 @@ class MyAgent:
         self._graph = graph_builder.compile(checkpointer=self.checkpointer, name=self.name)
 ```
 
-### Step 5: wire it to an API endpoint
+### Passo 5: conecte a um endpoint de API
 
-Create a route in `src/app/api/v1/` following the chatbot pattern:
+Crie uma rota em `src/app/api/v1/` seguindo o padrão do chatbot:
 
 ```python
 @router.post("/chat", response_model=ChatResponse)
@@ -977,30 +812,30 @@ async def chat(request: Request, chat_request: ChatRequest, session=Depends(get_
     return ChatResponse(messages=result)
 ```
 
-Auth, memory read/write, checkpoints, metrics, tracing, guardrails, and agent middleware stay outside your agent directory; details in [middleware-for-agent-harness.md](./middleware-for-agent-harness.md).
+Auth, leitura/escrita de memória, checkpoints, métricas, tracing, guardrails e middleware de agente ficam fora do diretório do seu agente. Veja detalhes em [middleware-for-agent-harness.md](./middleware-for-agent-harness.md).
 
 ---
 
 ## 15. Checklist
 
-| Concern | Implementation |
+| Preocupação | Implementação |
 |---|---|
-| Authentication | JWT, session per conversation |
-| Input guardrails | Content filter, injection patterns, PII block |
-| Output guardrails | Redaction modes, small safety model |
-| Agent middleware | `AgentPipeline` / `AgentMiddleware` in `src/app/core/middleware/`; [walkthrough](./middleware-for-agent-harness.md) |
-| Long-term memory | mem0 + pgvector, per user, async update |
-| Context | Tool eviction to disk, two-stage summarization |
-| State | `AsyncPostgresSaver`, thread id = session |
-| Observability | Langfuse, Prometheus, structlog |
-| Rate limiting | slowapi per route, env-tunable |
-| Errors | Retries, backoff, MCP and model degradation paths |
-| Streaming | SSE token stream |
-| Evaluation | Judge over Langfuse traces, markdown metrics |
-| Deployment | Docker non-root, Compose stack |
-| MCP | Multi-host, reconnect, built-in fallback |
-| Agent shapes | Custom graph, nested supervisors, Deep Agents |
+| Autenticação | JWT, sessão por conversa |
+| Guardrails de entrada | Content filter, padrões de injection, bloqueio de PII |
+| Guardrails de saída | Modos de redação, modelo pequeno de safety |
+| Middleware de agente | `AgentPipeline` / `AgentMiddleware` em `src/app/core/middleware/`; [walkthrough](./middleware-for-agent-harness.md) |
+| Memória de longo prazo | mem0 + pgvector, por usuário, update async |
+| Contexto | Despejo de ferramentas para disco, sumarização em duas etapas |
+| Estado | `AsyncPostgresSaver`, thread id = sessão |
+| Observabilidade | Langfuse, Prometheus, structlog |
+| Rate limiting | slowapi por rota, ajustável por env |
+| Erros | Retries, backoff, caminhos de degradação para MCP e modelo |
+| Streaming | Stream SSE de tokens |
+| Avaliação | Juiz sobre traces Langfuse, métricas markdown |
+| Deployment | Docker non-root, stack Compose |
+| MCP | Multi-host, reconexão, fallback interno |
+| Formatos de agente | Grafo customizado, supervisores aninhados, Deep Agents |
 
-The hard part of production is rarely the clever prompt. It is auth, safety, memory, checkpoints, observability, and failure modes. A harness lets you solve that once and keep agent code focused on behavior: a tight chat loop, a research fan-out, or a SQL ReAct agent can all sit on the same bones.
+A parte difícil da produção raramente é o prompt esperto. É auth, segurança, memória, checkpoints, observabilidade e modos de falha. Um harness permite resolver isso uma vez e manter o código do agente focado no comportamento: um loop de chat enxuto, uma pesquisa com fan-out ou um agente SQL ReAct podem todos se apoiar na mesma base.
 
-Source is in this repository if you want to fork and replace the reference agents with yours.
+O código-fonte está neste repositório se você quiser fazer fork e trocar os agentes de referência pelos seus.
