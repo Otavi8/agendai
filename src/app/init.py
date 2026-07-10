@@ -6,6 +6,7 @@ from langfuse.langchain import CallbackHandler
 from src.app.core.common.config import settings
 from src.app.core.common.logging import logger
 from src.app.core.agendai.agendai_repository import AgendAIRepository
+from src.app.core.costs.cost_repository import LLMCostRepository
 from src.app.core.db.database import database_factory
 from src.app.core.mcp.session_manager import get_mcp_session_manager
 from src.app.core.session import SessionRepository
@@ -15,6 +16,7 @@ dbsession = database_factory.get_session_maker()
 user_repository = UserRepository(dbsession)
 session_repository = SessionRepository(dbsession)
 agendai_repository = AgendAIRepository(dbsession)
+llm_cost_repository = LLMCostRepository(dbsession)
 
 
 def langfuse_init():

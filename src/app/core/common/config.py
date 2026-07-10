@@ -146,6 +146,19 @@ class Settings:
         self.DEFAULT_LLM_TEMPERATURE = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
         self.MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2000"))
         self.MAX_LLM_CALL_RETRIES = int(os.getenv("MAX_LLM_CALL_RETRIES", "3"))
+        self.LLM_COST_TRACKING_ENABLED = os.getenv("LLM_COST_TRACKING_ENABLED", "true").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        self.LLM_COST_BLOCKING_ENABLED = os.getenv("LLM_COST_BLOCKING_ENABLED", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        self.LLM_MONTHLY_BUDGET_USD = float(os.getenv("LLM_MONTHLY_BUDGET_USD", "0"))
+        self.LLM_REQUEST_BUDGET_USD = float(os.getenv("LLM_REQUEST_BUDGET_USD", "0"))
+        self.LLM_MODEL_PRICING_JSON = os.getenv("LLM_MODEL_PRICING_JSON", "")
 
         # Long term memory Configuration
         self.LONG_TERM_MEMORY_MODEL = os.getenv("LONG_TERM_MEMORY_MODEL", "gpt-5-nano")
@@ -222,6 +235,7 @@ class Settings:
             "data_agent": ["15 per minute"],
             "data_connect": ["10 per minute"],
             "agendai": ["30 per minute"],
+            "observability": ["30 per minute"],
             "messages": ["50 per minute"],
             "register": ["10 per hour"],
             "login": ["20 per minute"],

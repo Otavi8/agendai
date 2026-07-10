@@ -21,6 +21,7 @@ from src.app.api.v1.auth import router as auth_router
 from src.app.api.v1.chatbot import router as chatbot_router
 from src.app.api.v1.data_agent import router as data_agent_router
 from src.app.api.v1.deep_research import router as deep_research_router
+from src.app.api.v1.observability import router as observability_router
 from src.app.api.v1.text_to_sql import router as text_to_sql_router
 from src.app.core.common.config import settings
 from src.app.core.common.logging import logger
@@ -35,6 +36,7 @@ api_router.include_router(deep_research_router, prefix="/deep-research", tags=["
 api_router.include_router(text_to_sql_router, prefix="/text-to-sql", tags=["text-to-sql"])
 api_router.include_router(data_agent_router, prefix="/data-agent", tags=["data-agent"])
 api_router.include_router(agendai_router, prefix="/agendai", tags=["agendai"])
+api_router.include_router(observability_router, prefix="/observability", tags=["observability"])
 
 
 @api_router.get("/health")

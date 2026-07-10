@@ -726,6 +726,121 @@
         "uid": "prometheus"
       },
       "gridPos": { "x": 12, "y": 74, "w": 12, "h": 9 }
+    },
+    {
+      "type": "row",
+      "title": "Cost Control",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 83, "w": 24, "h": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Estimated LLM Cost",
+      "targets": [
+        {
+          "expr": "sum(llm_cost_usd_total{agent_name=~\"$agent_name\"})",
+          "legendFormat": "USD",
+          "refId": "COST_A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background"
+      },
+      "gridPos": { "x": 0, "y": 84, "w": 6, "h": 5 }
+    },
+    {
+      "type": "graph",
+      "title": "Estimated Cost Rate",
+      "targets": [
+        {
+          "expr": "sum by (model, agent_name) (rate(llm_cost_usd_total{agent_name=~\"$agent_name\"}[5m])) * 3600",
+          "legendFormat": "{{model}} / {{agent_name}} USD per hour",
+          "refId": "COST_B"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      },
+      "gridPos": { "x": 6, "y": 84, "w": 12, "h": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Budget Blocks",
+      "targets": [
+        {
+          "expr": "sum(llm_budget_exceeded_total{agent_name=~\"$agent_name\"})",
+          "legendFormat": "blocks",
+          "refId": "COST_C"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background"
+      },
+      "gridPos": { "x": 18, "y": 84, "w": 6, "h": 5 }
+    },
+    {
+      "type": "graph",
+      "title": "Request Cost Distribution",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(llm_request_cost_usd_bucket{agent_name=~\"$agent_name\"}[5m]))",
+          "legendFormat": "{{model}} / {{agent_name}} p95",
+          "refId": "COST_D"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      },
+      "gridPos": { "x": 0, "y": 92, "w": 12, "h": 8 }
+    },
+    {
+      "type": "graph",
+      "title": "Cost by Model",
+      "targets": [
+        {
+          "expr": "sum by (model) (llm_cost_usd_total{agent_name=~\"$agent_name\"})",
+          "legendFormat": "{{model}}",
+          "refId": "COST_E"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      },
+      "gridPos": { "x": 12, "y": 92, "w": 12, "h": 8 }
     }
   ]
 }

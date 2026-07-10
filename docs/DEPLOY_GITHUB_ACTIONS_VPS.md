@@ -35,8 +35,15 @@ MCP_ENABLED=false
 AGENDAI_ENABLE_REAL_EMAIL=false
 AGENDAI_ENABLE_REAL_WHATSAPP=false
 AGENDAI_ENABLE_REAL_MINIO=false
+LLM_COST_TRACKING_ENABLED=true
+LLM_COST_BLOCKING_ENABLED=false
+LLM_MONTHLY_BUDGET_USD=0
+LLM_REQUEST_BUDGET_USD=0
 APP_PORT=8000
 ```
+
+Para ativar bloqueio por orcamento, altere `LLM_COST_BLOCKING_ENABLED=true` e defina
+`LLM_MONTHLY_BUDGET_USD`. Com `0`, o sistema apenas registra tokens/custo e nao bloqueia chamadas.
 
 ## Secrets no GitHub
 

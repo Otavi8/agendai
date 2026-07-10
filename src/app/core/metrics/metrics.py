@@ -43,6 +43,25 @@ tokens_out_counter = Counter(
     "llm_tokens_out", "Number of output tokens", ["agent_name"]
 )
 
+llm_cost_usd_total = Counter(
+    "llm_cost_usd_total",
+    "Estimated LLM cost in USD",
+    ["model", "agent_name"],
+)
+
+llm_request_cost_usd = Histogram(
+    "llm_request_cost_usd",
+    "Estimated LLM cost per request in USD",
+    ["model", "agent_name"],
+    buckets=[0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+)
+
+llm_budget_exceeded_total = Counter(
+    "llm_budget_exceeded_total",
+    "Total LLM calls blocked by configured budget controls",
+    ["model", "agent_name", "budget_type"],
+)
+
 error_counter = Counter(
     "llm_errors", "Number of errors during LLM execution", ["agent_name"]
 )

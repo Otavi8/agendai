@@ -22,6 +22,7 @@ from src.app.core.agendai import (  # noqa: F401
     AgendAIVehicle,
     AgendAIYardAlert,
 )
+from src.app.core.costs.cost_model import LLMUsageRecord  # noqa: F401
 from src.app.core.session.session_model import Session as ChatSession  # noqa: F401
 from src.app.core.user.user_model import User  # noqa: F401
 
