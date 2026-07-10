@@ -1,7 +1,10 @@
 import type {
   ChatResponse,
+  Appointment,
+  AppointmentDetail,
   ConnectDbRequest,
   ConnectDbResponse,
+  DashboardSummary,
   GrantFolderResponse,
   Message,
   SessionResponse,
@@ -10,6 +13,7 @@ import type {
   StreamEvent,
   TokenResponse,
   UserResponse,
+  YardAlert,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -112,6 +116,48 @@ export async function clearMessages(sessionToken: string): Promise<void> {
     headers: { Authorization: `Bearer ${sessionToken}` },
   });
   await ensureOk(res);
+}
+
+// --- AgendAI: operational yard-management API ---
+
+export async function agendaiSummary(sessionToken: string): Promise<DashboardSummary> {
+  const res = await fetch(`${BASE}/agendai/dashboard/summary`, {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  return (await ensureOk(res)).json();
+}
+
+export async function listAgendaiAppointments(sessionToken: string): Promise<Appointment[]> {
+  const res = await fetch(`${BASE}/agendai/appointments`, {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  return (await ensureOk(res)).json();
+}
+
+export async function getAgendaiAppointment(
+  sessionToken: string,
+  appointmentId: number,
+): Promise<AppointmentDetail> {
+  const res = await fetch(`${BASE}/agendai/appointments/${appointmentId}`, {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  return (await ensureOk(res)).json();
+}
+
+export async function listAgendaiAlerts(sessionToken: string): Promise<YardAlert[]> {
+  const res = await fetch(`${BASE}/agendai/alerts`, {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  return (await ensureOk(res)).json();
+}
+
+export async function generateAgendaiLateAlerts(sessionToken: string): Promise<YardAlert[]> {
+  const res = await fetch(`${BASE}/agendai/alerts/generate-late`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  const data = await (await ensureOk(res)).json();
+  return data.created_alerts ?? [];
 }
 
 // --- Data Agent: connect a database / grant a folder / query the sources ---

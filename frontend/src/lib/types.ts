@@ -96,3 +96,90 @@ export interface AssistantTurn {
 }
 
 export type Turn = UserTurn | AssistantTurn;
+
+export type AppointmentStatus = "pending" | "checked_in" | "receiving" | "completed" | "cancelled" | "no_show";
+export type CheckInMethod = "qr_code" | "manual";
+export type AlertStatus = "open" | "acknowledged" | "resolved";
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface DashboardSummary {
+  pending_appointments: number;
+  completed_appointments: number;
+  check_ins: number;
+  late_loads: number;
+}
+
+export interface Driver {
+  id: number;
+  name: string;
+  cpf: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  notes: string;
+  created_at: string;
+}
+
+export interface Vehicle {
+  id: number;
+  driver_id: number;
+  plate: string;
+  model?: string | null;
+  color?: string | null;
+  year?: number | null;
+  created_at: string;
+}
+
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  authorized_email_domain?: string | null;
+  created_at: string;
+}
+
+export interface Appointment {
+  id: number;
+  driver_id: number;
+  vehicle_id: number;
+  supplier_id: number;
+  scheduled_at: string;
+  dock?: string | null;
+  load_reference?: string | null;
+  status: AppointmentStatus;
+  notes: string;
+  created_by_user_id?: number | null;
+  created_at: string;
+}
+
+export interface CheckIn {
+  id: number;
+  appointment_id: number;
+  checked_in_at?: string | null;
+  method: CheckInMethod;
+  notes: string;
+  confirmed_by_user_id?: number | null;
+  created_at: string;
+}
+
+export interface YardAlert {
+  id: number;
+  appointment_id: number;
+  alert_type: string;
+  severity: AlertSeverity;
+  message: string;
+  status: AlertStatus;
+  resolved_at?: string | null;
+  resolved_by_user_id?: number | null;
+  created_at: string;
+}
+
+export interface AppointmentDetail {
+  appointment: Appointment;
+  driver: Driver;
+  vehicle: Vehicle;
+  supplier: Supplier;
+  check_ins: CheckIn[];
+  alerts: YardAlert[];
+}

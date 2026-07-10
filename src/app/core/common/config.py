@@ -178,6 +178,22 @@ class Settings:
             h.strip() for h in os.getenv("MCP_HOSTNAMES_CSV", "").split(",") if h.strip()
         ]
 
+        # AgendAI MVP integrations are safe stubs unless explicitly enabled later.
+        self.AGENDAI_ENABLE_REAL_EMAIL = os.getenv("AGENDAI_ENABLE_REAL_EMAIL", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        self.AGENDAI_ENABLE_REAL_WHATSAPP = os.getenv("AGENDAI_ENABLE_REAL_WHATSAPP", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        self.AGENDAI_ENABLE_REAL_MINIO = os.getenv("AGENDAI_ENABLE_REAL_MINIO", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
 
         # Per-session data sources + sandbox Configuration
         self.SESSION_SOURCE_TTL = int(os.getenv("SESSION_SOURCE_TTL", "3600"))
@@ -205,6 +221,7 @@ class Settings:
             "text_to_sql": ["15 per minute"],
             "data_agent": ["15 per minute"],
             "data_connect": ["10 per minute"],
+            "agendai": ["30 per minute"],
             "messages": ["50 per minute"],
             "register": ["10 per hour"],
             "login": ["20 per minute"],

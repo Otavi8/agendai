@@ -25,19 +25,19 @@ export default function Composer({
   }
 
   return (
-    <div className="flex items-end gap-2 border-t border-slate-800 bg-slate-950 p-3">
+    <div className="flex items-end gap-2 border-t border-zinc-200 bg-white p-3">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKeyDown}
         rows={1}
-        placeholder="Escreva uma mensagem…  (Enter envia, Shift+Enter quebra linha)"
-        className="max-h-40 flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+        placeholder="Pergunte ao AgendAI"
+        className="max-h-40 flex-1 resize-none rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-950 outline-none focus:border-emerald-600"
       />
       <button
         onClick={submit}
         disabled={disabled || !text.trim()}
-        className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+        className="rounded-lg bg-emerald-700 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
       >
         Enviar
       </button>

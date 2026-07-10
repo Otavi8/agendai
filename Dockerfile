@@ -12,22 +12,25 @@ ENV APP_ENV=${APP_ENV} \
     PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100
+    PIP_DEFAULT_TIMEOUT=100 \
+    PATH="/app/.venv/bin:${PATH}"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
     libpq-dev \
     && pip install --upgrade pip \
     && pip install uv \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml first to leverage Docker cache
-COPY pyproject.toml .
-RUN uv venv && . .venv/bin/activate && uv pip install -e .
+# Copy dependency metadata first to leverage Docker cache.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv venv && uv sync --frozen --no-install-project
 
 # Copy the application
 COPY . .
+RUN uv pip install -e .
 
 # Make entrypoint script executable - do this before changing user
 RUN chmod +x /app/scripts/docker-entrypoint.sh
@@ -47,4 +50,4 @@ RUN echo "Using ${APP_ENV} environment"
 
 # Command to run the application
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
-CMD ["/app/.venv/bin/uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,6 +1,6 @@
 # Pin the Compose project name so the volume/network names stay stable
 # regardless of the folder name.
-name: agent-harness-prod
+name: agendai
 
 services:
   db:
@@ -26,34 +26,34 @@ services:
     networks:
       - monitoring
 
-  # Single API service with dynamic environment
-#  app:
-#    build:
-#      context: .
-#      args:
-#        APP_ENV: ${APP_ENV:-development}
-#    ports:
-#      - "8000:8000"
-#    volumes:
-#      - ./app:/app/src
-#      - ./logs:/app/logs
-#    env_file:
-#      - .env.${APP_ENV:-development}
-#    environment:
-#      - APP_ENV=${APP_ENV:-development}
-#      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretkeythatshouldbechangedforproduction}
-#    depends_on:
-#      db:
-#        condition: service_healthy
-#    healthcheck:
-#      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-#      interval: 30s
-#      timeout: 10s
-#      retries: 3
-#      start_period: 10s
-#    restart: on-failure
-#    networks:
-#      - monitoring
+  app:
+    image: ${APP_IMAGE:-agendai-app:local}
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./logs:/app/logs
+    env_file:
+      - .env.${APP_ENV:-production}
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - monitoring
 
   # Prometheus
   prometheus:
@@ -66,6 +66,8 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
     networks:
       - monitoring
+    depends_on:
+      - app
     restart: always
 
   # Grafana

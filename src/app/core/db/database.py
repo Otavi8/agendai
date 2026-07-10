@@ -13,6 +13,17 @@ from src.app.core.common.config import (
     settings,
 )
 from src.app.core.common.logging import logger
+from src.app.core.agendai import (  # noqa: F401
+    AgendAIBusinessRuleDocument,
+    AgendAICheckIn,
+    AgendAIDriver,
+    AgendAIAppointment,
+    AgendAISupplier,
+    AgendAIVehicle,
+    AgendAIYardAlert,
+)
+from src.app.core.session.session_model import Session as ChatSession  # noqa: F401
+from src.app.core.user.user_model import User  # noqa: F401
 
 
 class DatabaseFactory:

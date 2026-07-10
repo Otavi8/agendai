@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse
 from src.app.api.security.limiter import (
     limiter,
 )
+from src.app.api.v1.agendai import router as agendai_router
 from src.app.api.v1.auth import router as auth_router
 from src.app.api.v1.chatbot import router as chatbot_router
 from src.app.api.v1.data_agent import router as data_agent_router
@@ -33,6 +34,7 @@ api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(deep_research_router, prefix="/deep-research", tags=["deep-research"])
 api_router.include_router(text_to_sql_router, prefix="/text-to-sql", tags=["text-to-sql"])
 api_router.include_router(data_agent_router, prefix="/data-agent", tags=["data-agent"])
+api_router.include_router(agendai_router, prefix="/agendai", tags=["agendai"])
 
 
 @api_router.get("/health")
